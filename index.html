@@ -5118,7 +5118,7 @@ function printCommEdit() {
 
 async function buildPermTable() {
   // ユーザー設定テーブルからadmin以外を取得
-  const { data: allUsers, error } = await db.from('ユーザー設定').select('*').eq('有効', true).order('id');
+  const { data: allUsers, error } = await db.from('ユーザー設定').select('*').eq('有効', true).order('表示順', { nullsFirst: false }).order('id');
   if (error || !allUsers) {
     document.getElementById('perm-thead').innerHTML = '<tr><td style="color:red;padding:8px">ユーザー設定の取得に失敗しました</td></tr>';
     return;
