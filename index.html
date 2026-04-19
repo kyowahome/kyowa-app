@@ -5864,6 +5864,7 @@ let _invOrderData = null;
 let _invPayments  = [];
 
 async function openInvoiceModal() {
+  alert('請求書ボタンが押されました。currentOrderId=' + currentOrderId);
   if (!currentOrderId) { showToast('案件を開いてから操作してください', true); return; }
   try {
     // 案件データ取得
