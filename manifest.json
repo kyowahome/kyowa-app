@@ -1,0 +1,17 @@
+{
+  "name": "協和ホームサービス 受発注管理",
+  "short_name": "KHS管理",
+  "description": "協和ホームサービス 受発注管理システム",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#e65100",
+  "theme_color": "#e65100",
+  "icons": [
+    {
+      "src": "kyowa_icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
