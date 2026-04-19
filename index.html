@@ -1974,18 +1974,12 @@ const USER_PERMS = {
 
 function editorCan(perm) {
   if (isAdmin()) return true;
-  const uid = currentUser?.id;
-  if (isShacho()) {
-    // 社長：ユーザー別設定、なければ false
-    return USER_PERMS['m-endo']?.[perm] === true;
-  }
-  if (isEditor()) {
-    // ユーザー別設定があればそれを使用、なければデフォルト
-    if (USER_PERMS[uid] && USER_PERMS[uid][perm] !== undefined) {
-      return USER_PERMS[uid][perm];
-    }
-    return USER_PERMS['_default_editor']?.[perm] !== false;
-  }
+  // Supabaseから読み込んだ権限（currentUser.permsに格納）を参照
+  const perms = currentUser?.perms || {};
+  if (perms[perm] !== undefined) return perms[perm];
+  // 未設定の場合はロール別デフォルト
+  if (isShacho()) return false;
+  if (isEditor()) return USER_PERMS['_default_editor']?.[perm] !== false;
   return false;
 }
 let currentUser = null;
@@ -2021,6 +2015,7 @@ async function doLogin() {
       name:       userSetting.名前,
       role:       userSetting.ロール,
       staffName:  userSetting.担当者名,
+      perms:      userSetting.権限 || {},
     };
     startApp();
   } catch(e) {
@@ -2135,6 +2130,7 @@ function showToastLogin(msg) {
           name:      userSetting.名前,
           role:      userSetting.ロール,
           staffName: userSetting.担当者名,
+          perms:     userSetting.権限 || {},
         };
         startApp();
         return;
@@ -5125,7 +5121,7 @@ async function buildPermTable() {
   }
   const users = allUsers
     .filter(u => u.ロール !== 'admin')
-    .map(u => ({ id: u.ログインID, name: u.名前, role: u.ロール }));
+    .map(u => ({ id: u.ログインID, name: u.名前, role: u.ロール, perms: u.権限 || {} }));
   const roleLabel = { shacho:'社長', editor:'編集者', viewer:'閲覧者' };
 
   // ヘッダー：ユーザー名
@@ -5148,14 +5144,14 @@ async function buildPermTable() {
       </td>
       ${users.map(u => {
         const isViewer = u.role === 'viewer';
-        // 現在の設定値を取得
         let val;
         if (isViewer) {
-          val = false; // 閲覧者は全てNG
-        } else if (USER_PERMS[u.id] && USER_PERMS[u.id][item.key] !== undefined) {
-          val = USER_PERMS[u.id][item.key];
+          val = false;
+        } else if (u.perms[item.key] !== undefined) {
+          // Supabaseに保存された権限を優先
+          val = u.perms[item.key];
         } else {
-          // デフォルト
+          // 未設定の場合はデフォルト値
           if (u.role === 'shacho') val = item.key === 'コミッション_編集';
           else val = USER_PERMS['_default_editor']?.[item.key] !== false;
         }
@@ -5169,16 +5165,31 @@ async function buildPermTable() {
     </tr>`).join('');
 }
 
-function savePermSettings() {
-  // チェックボックスから値を読み取ってUSER_PERMSを更新
+async function savePermSettings() {
+  // ユーザーごとに権限をまとめる
+  const permMap = {}; // { ログインID: { perm_key: bool, ... } }
   document.querySelectorAll('#perm-tbody input[type=checkbox]').forEach(cb => {
     const uid  = cb.dataset.uid;
     const perm = cb.dataset.perm;
     if (!uid || !perm) return;
-    if (!USER_PERMS[uid]) USER_PERMS[uid] = {};
-    USER_PERMS[uid][perm] = cb.checked;
+    if (!permMap[uid]) permMap[uid] = {};
+    permMap[uid][perm] = cb.checked;
   });
-  showToast('権限設定を更新しました');
+
+  // Supabaseに保存
+  const errors = [];
+  for (const [loginId, perms] of Object.entries(permMap)) {
+    const { error } = await db.from('ユーザー設定')
+      .update({ 権限: perms })
+      .eq('ログインID', loginId);
+    if (error) errors.push(loginId);
+  }
+
+  if (errors.length > 0) {
+    showToast('一部の保存に失敗しました: ' + errors.join(', '), true);
+  } else {
+    showToast('権限設定を保存しました');
+  }
 }
 
 
