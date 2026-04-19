@@ -2128,9 +2128,13 @@ function applyPermissions() {
     const bulkBtn = document.getElementById('ol-tab-bulk-btn');
     if (bulkBtn) bulkBtn.style.display = editorCan('受注一覧_一括入金入力') ? '' : 'none';
 
-    // 受注一覧：詳細編集の保存ボタン
-    const odSaveBtn = document.querySelector('#order-detail-modal button[onclick="saveOrderDetail()"]');
-    if (odSaveBtn) odSaveBtn.style.display = editorCan('受注一覧_詳細編集') ? '' : 'none';
+    // 受注一覧：詳細編集の保存ボタン（請求書ボタンは除外）
+    document.querySelectorAll('#order-detail-modal button[onclick="saveOrderDetail()"]').forEach(el => {
+      el.style.display = editorCan('受注一覧_詳細編集') ? '' : 'none';
+    });
+    // 請求書ボタンは常に表示（権限制御なし）
+    const invBtn = document.getElementById('od-invoice-btn');
+    if (invBtn) invBtn.style.display = '';
 
     // 営業支援：編集ボタン（動的に生成されるため関数側でも制御）
     document.querySelectorAll('[onclick*="editProspect"]').forEach(el => {
@@ -5858,37 +5862,43 @@ let _invOrderData = null;
 let _invPayments  = [];
 
 async function openInvoiceModal() {
-  if (!currentOrderId) return;
+  if (!currentOrderId) { showToast('案件を開いてから操作してください', true); return; }
+  try {
+    // 案件データ取得
+    const { data: p, error: pErr } = await db.from('工事案件')
+      .select('*, 顧客(施主名,郵便番号,現場住所,自宅電話,携帯電話)')
+      .eq('id', currentOrderId).single();
+    if (pErr) throw new Error('案件取得エラー: ' + pErr.message);
+    if (!p) throw new Error('案件データが見つかりません');
 
-  // 案件データ取得
-  const { data: p } = await db.from('工事案件')
-    .select('*, 顧客(施主名,郵便番号,現場住所,自宅電話,携帯電話)')
-    .eq('id', currentOrderId).single();
-  if (!p) return;
+    // 入金データ取得
+    const { data: pays, error: payErr } = await db.from('入金')
+      .select('*').eq('案件id', currentOrderId).order('id');
+    if (payErr) throw new Error('入金取得エラー: ' + payErr.message);
+    _invOrderData = p;
+    _invPayments  = pays || [];
 
-  // 入金データ取得
-  const { data: pays } = await db.from('入金')
-    .select('*').eq('案件id', currentOrderId).order('id');
-  _invOrderData = p;
-  _invPayments  = pays || [];
+    // タイトル
+    document.getElementById('inv-case-title').textContent =
+      `${p.工事番号} ／ ${p.顧客?.施主名||'—'} ／ 契約金額 ¥${Number(p.契約金額||0).toLocaleString()}`;
 
-  // タイトル
-  document.getElementById('inv-case-title').textContent =
-    `${p.工事番号} ／ ${p.顧客?.施主名||'—'} ／ 契約金額 ¥${Number(p.契約金額||0).toLocaleString()}`;
+    // 請求日デフォルト（今日）
+    document.getElementById('inv-date').value = new Date().toISOString().split('T')[0];
 
-  // 請求日デフォルト（今日）
-  document.getElementById('inv-date').value = new Date().toISOString().split('T')[0];
+    // 発行元を会社区分・支店から自動選択
+    const branchSel = document.getElementById('inv-branch');
+    const co = (p.会社区分||'').includes('エステート') ? 'est' : 'hs';
+    const br = (p.支店||'').includes('岩手') ? 'iwate' : (p.支店||'').includes('仙台') ? 'sendai' : 'yamagata';
+    branchSel.value = `${co}_${br}`;
 
-  // 発行元を会社区分・支店から自動選択
-  const branchSel = document.getElementById('inv-branch');
-  const co = (p.会社区分||'').includes('エステート') ? 'est' : 'hs';
-  const br = (p.支店||'').includes('岩手') ? 'iwate' : (p.支店||'').includes('仙台') ? 'sendai' : 'yamagata';
-  branchSel.value = `${co}_${br}`;
+    // 支払パターンと請求書一覧を表示
+    renderInvoicePattern();
 
-  // 支払パターンと請求書一覧を表示
-  renderInvoicePattern();
-
-  document.getElementById('invoice-modal').style.display = 'flex';
+    document.getElementById('invoice-modal').style.display = 'flex';
+  } catch(e) {
+    showToast('請求書モーダルエラー: ' + e.message, true);
+    console.error('openInvoiceModal error:', e);
+  }
 }
 
 function renderInvoicePattern() {
