@@ -2283,13 +2283,18 @@ async function init() {
   loadDashboard();
   setSchedule(2);
 
-  // 請求書ボタン：起動時に1回だけ登録
-  const invBtn = document.getElementById('od-invoice-btn');
-  if (invBtn) {
-    invBtn.addEventListener('click', function() {
+  // 請求書ボタン：documentレベルで登録（最も確実な方法）
+  document.addEventListener('click', function(e) {
+    // デバッグ：クリックされた要素をログ
+    if (e.target.closest('#order-detail-modal')) {
+      console.log('modal click:', e.target.tagName, e.target.id, e.target.textContent?.trim().slice(0,20));
+    }
+    const btn = e.target.closest('#od-invoice-btn');
+    if (btn) {
+      console.log('invoice button clicked via document listener');
       openInvoiceModal();
-    });
-  }
+    }
+  });
 }
 
 // ===== 担当者ロード =====
