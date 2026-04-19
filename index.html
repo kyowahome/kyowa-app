@@ -718,6 +718,10 @@
             style="padding:8px 16px;border:none;background:var(--surface2);color:var(--text-sub);font-size:13px;cursor:pointer;border-radius:6px 6px 0 0;margin-left:4px">
             発注・支払
           </button>
+          <button onclick="openInvoiceModal()" id="od-invoice-btn"
+            style="padding:8px 14px;border:none;background:#e65100;color:#fff;font-size:13px;font-weight:600;cursor:pointer;border-radius:6px 6px 0 0;margin-left:auto">
+            📄 請求書発行
+          </button>
         </div>
 
         <!-- 基本情報タブ -->
@@ -1827,6 +1831,57 @@
             </tr></thead>
             <tbody id="vendor-body"><tr><td colspan="7" class="loading">読み込み中...</td></tr></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- 請求書発行モーダル -->
+      <div id="invoice-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:flex-start;justify-content:center;padding:1rem;overflow-y:auto">
+        <div style="background:#fff;border-radius:12px;padding:1.5rem;width:100%;max-width:480px;margin-top:2rem;position:relative">
+          <button onclick="closeInvoiceModal()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px;color:#e65100">📄 請求書発行</div>
+          <div id="inv-case-title" style="font-size:12px;color:var(--text-sub);margin-bottom:1rem"></div>
+
+          <!-- 発行元選択 -->
+          <div style="margin-bottom:12px">
+            <label style="font-size:12px;font-weight:600;color:var(--text-sub)">発行元</label>
+            <select id="inv-branch" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-top:4px">
+              <option value="hs_yamagata">㈱協和ホームサービス（山形）</option>
+              <option value="hs_sendai">㈱協和ホームサービス（仙台）</option>
+              <option value="hs_iwate">㈱協和ホームサービス（岩手）</option>
+              <option value="est_sendai">㈱協和エステート（仙台）</option>
+              <option value="est_iwate">㈱協和エステート（岩手）</option>
+              <option value="est_yamagata">㈱協和エステート（山形）</option>
+            </select>
+          </div>
+
+          <!-- 請求日 -->
+          <div style="margin-bottom:12px">
+            <label style="font-size:12px;font-weight:600;color:var(--text-sub)">請求日</label>
+            <input type="date" id="inv-date" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-top:4px">
+          </div>
+
+          <!-- 支払パターン -->
+          <div style="margin-bottom:12px">
+            <label style="font-size:12px;font-weight:600;color:var(--text-sub)">支払パターン</label>
+            <div id="inv-pattern-info" style="font-size:13px;background:var(--surface2);padding:8px 12px;border-radius:6px;margin-top:4px"></div>
+          </div>
+
+          <!-- 発行する請求書を選択 -->
+          <div style="margin-bottom:16px">
+            <label style="font-size:12px;font-weight:600;color:var(--text-sub)">発行する請求書</label>
+            <div id="inv-payment-list" style="margin-top:6px;display:flex;flex-direction:column;gap:6px"></div>
+          </div>
+
+          <!-- メモ -->
+          <div style="margin-bottom:16px">
+            <label style="font-size:12px;font-weight:600;color:var(--text-sub)">摘要・メモ（任意）</label>
+            <input type="text" id="inv-memo" placeholder="例：雨樋交換工事 他" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-top:4px">
+          </div>
+
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn sm" onclick="closeInvoiceModal()">キャンセル</button>
+            <button class="btn sm primary" onclick="printInvoice()" style="background:#e65100;border-color:#e65100">🖨 印刷プレビュー</button>
+          </div>
         </div>
       </div>
 
@@ -5725,6 +5780,338 @@ async function loadMaster() {
     if (vbody) vbody.innerHTML =
       `<tr><td colspan="7" style="color:red;padding:12px">例外: ${e.message}</td></tr>`;
   }
+}
+
+// ===== 請求書発行 =====
+
+const INVOICE_COMPANIES = {
+  hs_yamagata: {
+    name: '株式会社協和ホームサービス',
+    reg:  'T2370001014877',
+    zip:  '990-2414',
+    addr: '山形県山形市寿町７番１５号',
+    tel:  '023-679-3383',
+    banks: [
+      { name:'山形銀行', branch:'泉崎支店', type:'普通', no:'0225401', holder:'カ．キョウワホームサービス' },
+      { name:'ゆうちょ銀行', branch:'', type:'記号18120', no:'番号33585951', holder:'カ．キョウワホームサービス' },
+    ],
+  },
+  hs_sendai: {
+    name: '株式会社協和ホームサービス',
+    reg:  'T2370001014877',
+    zip:  '982-0804',
+    addr: '仙台市太白区鈎取1-5-11-101',
+    tel:  '022-748-7182',
+    banks: [
+      { name:'仙台農業協同組合', branch:'西多賀支店', type:'普通', no:'0027818', holder:'カ．キョウワホームサービス' },
+      { name:'ゆうちょ銀行', branch:'', type:'記号18120', no:'番号33585951', holder:'カ．キョウワホームサービス' },
+    ],
+  },
+  hs_iwate: {
+    name: '株式会社協和ホームサービス',
+    reg:  'T2370001014877',
+    zip:  '028-3303',
+    addr: '岩手県紫波郡紫波町高水寺字古屋敷6-31',
+    tel:  '0120-980-136',
+    banks: [
+      { name:'ゆうちょ銀行', branch:'', type:'記号18120', no:'番号33585951', holder:'カ．キョウワホームサービス' },
+    ],
+  },
+  est_sendai: {
+    name: '株式会社協和エステート',
+    reg:  'T1390001015189',
+    zip:  '982-0804',
+    addr: '仙台市太白区鈎取1-5-11-101',
+    tel:  '022-748-7182',
+    banks: [
+      { name:'仙台農業協同組合', branch:'西多賀支店', type:'普通', no:'0027818', holder:'カ．キョウワエステート' },
+      { name:'ゆうちょ銀行', branch:'', type:'記号18120', no:'番号33585951', holder:'カ．キョウワエステート' },
+    ],
+  },
+  est_iwate: {
+    name: '株式会社協和エステート',
+    reg:  'T1390001015189',
+    zip:  '028-3303',
+    addr: '岩手県紫波郡紫波町高水寺字古屋敷6-31',
+    tel:  '0120-980-136',
+    banks: [
+      { name:'ゆうちょ銀行', branch:'', type:'記号18120', no:'番号33585951', holder:'カ．キョウワエステート' },
+    ],
+  },
+  est_yamagata: {
+    name: '株式会社協和エステート',
+    reg:  'T1390001015189',
+    zip:  '990-2414',
+    addr: '山形県山形市寿町７番１５号',
+    tel:  '023-679-3383',
+    banks: [
+      { name:'山形銀行', branch:'泉崎支店', type:'普通', no:'0225401', holder:'カ．キョウワエステート' },
+      { name:'ゆうちょ銀行', branch:'', type:'記号18120', no:'番号33585951', holder:'カ．キョウワエステート' },
+    ],
+  },
+};
+
+let _invOrderData = null;
+let _invPayments  = [];
+
+async function openInvoiceModal() {
+  if (!currentOrderId) return;
+
+  // 案件データ取得
+  const { data: p } = await db.from('工事案件')
+    .select('*, 顧客(施主名,郵便番号,現場住所,自宅電話,携帯電話)')
+    .eq('id', currentOrderId).single();
+  if (!p) return;
+
+  // 入金データ取得
+  const { data: pays } = await db.from('入金')
+    .select('*').eq('工事案件id', currentOrderId).order('id');
+  _invOrderData = p;
+  _invPayments  = pays || [];
+
+  // タイトル
+  document.getElementById('inv-case-title').textContent =
+    `${p.工事番号} ／ ${p.顧客?.施主名||'—'} ／ 契約金額 ¥${Number(p.契約金額||0).toLocaleString()}`;
+
+  // 請求日デフォルト（今日）
+  document.getElementById('inv-date').value = new Date().toISOString().split('T')[0];
+
+  // 発行元を会社区分・支店から自動選択
+  const branchSel = document.getElementById('inv-branch');
+  const co = (p.会社区分||'').includes('エステート') ? 'est' : 'hs';
+  const br = (p.支店||'').includes('岩手') ? 'iwate' : (p.支店||'').includes('仙台') ? 'sendai' : 'yamagata';
+  branchSel.value = `${co}_${br}`;
+
+  // 支払パターンと請求書一覧を表示
+  renderInvoicePattern();
+
+  document.getElementById('invoice-modal').style.display = 'flex';
+}
+
+function renderInvoicePattern() {
+  const p     = _invOrderData;
+  const pays  = _invPayments;
+  const total = Number(p.契約金額||0);
+  const count = Number(p.支払回数||1);
+
+  // パターン判定
+  let patternLabel = '';
+  if (count <= 1) patternLabel = '一括払い（1回）';
+  else if (count === 2) patternLabel = '前金＋完工金（2回）';
+  else patternLabel = `前金＋中間＋完工金（${count}回）`;
+
+  document.getElementById('inv-pattern-info').innerHTML =
+    `<b>${patternLabel}</b>　支払回数：${count}回　合計：¥${total.toLocaleString()}`;
+
+  // 請求書一覧
+  const listEl = document.getElementById('inv-payment-list');
+  listEl.innerHTML = '';
+
+  pays.forEach((pay, idx) => {
+    const amt    = Number(pay.請求金額||0);
+    const paid   = !!pay.入金日;
+    const label  = getPaymentLabel(idx, count);
+    const checked = !paid; // 未入金のものをデフォルトチェック
+
+    listEl.innerHTML += `
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;
+        background:${paid?'#f5f5f5':'#fff8f0'};border:1px solid ${paid?'#ddd':'#e65100'};
+        border-radius:8px;cursor:pointer">
+        <input type="radio" name="inv-pay-idx" value="${idx}" ${checked?'checked':''}>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600">${label}</div>
+          <div style="font-size:12px;color:var(--text-sub)">
+            請求額：¥${amt.toLocaleString()}
+            ${pay.請求日 ? '　請求日：'+pay.請求日 : ''}
+            ${paid ? '　<span style="color:var(--green);font-weight:600">✓ 入金済</span>' : '　<span style="color:#e65100">未入金</span>'}
+          </div>
+        </div>
+      </label>`;
+  });
+
+  // 入金データがない場合（まだ登録されていない）
+  if (pays.length === 0) {
+    listEl.innerHTML = `<div style="color:var(--text-sub);font-size:13px;padding:8px">
+      入金データがありません。受注入力で支払回数と請求金額を登録してください。</div>`;
+  }
+}
+
+function getPaymentLabel(idx, total) {
+  if (total <= 1) return '一括請求';
+  if (total === 2) return idx === 0 ? '前金請求' : '完工金請求';
+  if (idx === 0) return '前金請求';
+  if (idx === total - 1) return '完工金請求';
+  return `中間請求（${idx}/${total-1}）`;
+}
+
+function closeInvoiceModal() {
+  document.getElementById('invoice-modal').style.display = 'none';
+}
+
+function printInvoice() {
+  const p      = _invOrderData;
+  const pays   = _invPayments;
+  const sel    = document.querySelector('input[name="inv-pay-idx"]:checked');
+  if (!sel && pays.length > 0) { showToast('発行する請求書を選択してください', true); return; }
+
+  const payIdx = sel ? parseInt(sel.value) : 0;
+  const pay    = pays[payIdx] || {};
+  const co     = INVOICE_COMPANIES[document.getElementById('inv-branch').value];
+  const invDate = document.getElementById('inv-date').value;
+  const memo   = document.getElementById('inv-memo').value;
+  const total  = Number(p.契約金額||0);
+  const count  = Number(p.支払回数||1);
+  const amt    = Number(pay.請求金額||0);
+  const label  = getPaymentLabel(payIdx, count);
+  const amtExcl = Math.round(amt / 1.1);
+  const tax     = amt - amtExcl;
+  const kojiName = p.工事名 || '工事';
+  const custName = p.顧客?.施主名 || '';
+  const invDateFmt = invDate ? invDate.replace(/-/g,'/') : '';
+
+  // 振込先HTML
+  const bankHtml = co.banks.map(b =>
+    `<tr>
+      <td style="padding:4px 8px;border:1px solid #ccc;font-size:12px">${b.name}${b.branch?' '+b.branch:''}</td>
+      <td style="padding:4px 8px;border:1px solid #ccc;font-size:12px">${b.type} ${b.no}</td>
+      <td style="padding:4px 8px;border:1px solid #ccc;font-size:12px">${b.holder}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>請求書 ${custName} 様</title>
+<style>
+  @page { size: A4; margin: 15mm 15mm 15mm 15mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'MS Mincho','Yu Mincho','Hiragino Mincho Pro',serif; font-size: 13px; color: #000; }
+  .page { width: 100%; padding: 0; }
+  h1 { text-align: center; font-size: 28px; letter-spacing: 16px; margin-bottom: 6px; font-weight: normal; }
+  .header-right { text-align: right; font-size: 12px; margin-bottom: 20px; }
+  .to-block { margin-bottom: 16px; }
+  .to-name { font-size: 22px; font-weight: bold; border-bottom: 2px solid #000; display: inline-block; padding-bottom: 2px; min-width: 260px; }
+  .greeting { font-size: 13px; margin: 10px 0; }
+  .total-box { border: 2px solid #000; padding: 10px 16px; margin: 14px 0; display: flex; align-items: center; justify-content: space-between; }
+  .total-label { font-size: 14px; }
+  .total-amount { font-size: 22px; font-weight: bold; }
+  .items table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  .items th { background: #1a3a5c; color: #fff; padding: 7px 10px; font-size: 12px; border: 1px solid #999; }
+  .items td { padding: 7px 10px; border: 1px solid #ccc; font-size: 13px; }
+  .items .subtotal-row td { background: #f5f5f5; font-weight: 600; }
+  .items .total-row td { background: #1a3a5c; color: #fff; font-weight: bold; font-size: 14px; }
+  .right { text-align: right; }
+  .company-block { text-align: right; margin: 16px 0 10px; line-height: 1.8; font-size: 12px; }
+  .company-name { font-size: 15px; font-weight: bold; }
+  .bank-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  .bank-table th { background: #eee; padding: 4px 8px; border: 1px solid #ccc; font-size: 12px; }
+  .note { font-size: 11px; color: #555; margin-top: 10px; }
+  .reg-no { font-size: 11px; color: #333; }
+  @media print { .no-print { display: none; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <!-- 印刷ボタン -->
+  <div class="no-print" style="text-align:center;margin-bottom:16px">
+    <button onclick="window.print()" style="padding:10px 30px;font-size:15px;background:#e65100;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨 印刷する</button>
+    <button onclick="window.close()" style="padding:10px 20px;font-size:14px;background:#666;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-left:8px">閉じる</button>
+  </div>
+
+  <h1>請　　　求　　　書</h1>
+  <div class="header-right">
+    請求日：${invDateFmt}<br>
+    <span style="color:#888">工事番号：${p.工事番号||''}</span>
+    ${label ? `　<span style="background:#e65100;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px">${label}</span>` : ''}
+  </div>
+
+  <!-- 宛先 -->
+  <div class="to-block">
+    〒${p.顧客?.郵便番号||''}　${p.顧客?.現場住所||''}
+    <div><span class="to-name">${custName}</span>　様</div>
+  </div>
+
+  <div class="greeting">
+    下記のとおり、ご請求申し上げます。<br>
+    <span style="font-size:11px;color:#555">※恐れ入りますが、集金は致しかねます。</span>
+  </div>
+
+  <!-- 合計金額 -->
+  <div class="total-box">
+    <span class="total-label">合計金額（消費税等込）</span>
+    <span class="total-amount">¥ ${amt.toLocaleString()}</span>
+  </div>
+
+  <!-- 明細 -->
+  <div class="items">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:50%">品名・摘要</th>
+          <th style="width:10%">数量</th>
+          <th style="width:10%">単位</th>
+          <th style="width:15%" class="right">単価</th>
+          <th style="width:15%" class="right">金額</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>${kojiName}${memo?' '+memo:''}</td>
+          <td style="text-align:center">1</td>
+          <td style="text-align:center">式</td>
+          <td class="right"></td>
+          <td class="right">¥${amtExcl.toLocaleString()}</td>
+        </tr>
+        <tr><td colspan="5" style="padding:4px"></td></tr>
+        <tr class="subtotal-row">
+          <td colspan="4" class="right">小計（消費税等無し）</td>
+          <td class="right">¥${amtExcl.toLocaleString()}</td>
+        </tr>
+        <tr class="subtotal-row">
+          <td colspan="4" class="right">消費税等（10%）</td>
+          <td class="right">¥${tax.toLocaleString()}</td>
+        </tr>
+        <tr class="total-row">
+          <td colspan="4" class="right">合　計</td>
+          <td class="right">¥${amt.toLocaleString()}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 会社情報 -->
+  <div class="company-block">
+    <div class="company-name">${co.name}</div>
+    <div class="reg-no">登録番号：${co.reg}</div>
+    〒${co.zip}　${co.addr}<br>
+    TEL：${co.tel}<br>
+    代表取締役　遠藤幹雄　㊞
+  </div>
+
+  <!-- 振込先 -->
+  <div style="margin-top:12px">
+    <div style="font-size:12px;font-weight:600;margin-bottom:4px;border-bottom:1px solid #ccc;padding-bottom:3px">お振込先</div>
+    <table class="bank-table">
+      <thead>
+        <tr>
+          <th>金融機関</th>
+          <th>口座番号</th>
+          <th>名義</th>
+        </tr>
+      </thead>
+      <tbody>${bankHtml}</tbody>
+    </table>
+  </div>
+
+  <div class="note">※お振込み手数料はご負担くださいますようお願い申し上げます。</div>
+</div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=800,height=1000');
+  win.document.write(html);
+  win.document.close();
+  closeInvoiceModal();
 }
 
 // ===== 郵便番号自動入力 =====
