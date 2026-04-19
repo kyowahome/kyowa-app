@@ -5620,32 +5620,51 @@ async function loadMaster() {
   }
 
   // 担当者マスタ
-  const { data } = await db.from('担当者').select('*').order('id');
-  const tbody = document.getElementById('staff-body');
-  tbody.innerHTML = (data||[]).map(s => `
-    <tr>
-      <td style="font-weight:600">${s.担当者名}</td>
-      <td>${s.担当者区分||'—'}</td>
-      <td><span class="badge ${s.契約区分==='業務委託'?'amber':s.契約区分==='半業務委託'?'blue':'gray'}">${s.契約区分||'社員'}</span></td>
-      <td style="text-align:right">${((s.アポ率||0)*100).toFixed(0)}%</td>
-      <td style="text-align:right">${((s.クロ率||0)*100).toFixed(0)}%</td>
-      <td>${s.有効フラグ?'✓':'—'}</td>
-    </tr>`).join('');
+  try {
+    const { data, error } = await db.from('担当者').select('*').order('id');
+    const tbody = document.getElementById('staff-body');
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="6" style="color:red;padding:12px">エラー: ${error.message}</td></tr>`;
+    } else {
+      tbody.innerHTML = (data||[]).length === 0
+        ? '<tr><td colspan="6" style="padding:12px;color:#888">データなし</td></tr>'
+        : (data||[]).map(s => `
+          <tr>
+            <td style="font-weight:600">${s.担当者名}</td>
+            <td>${s.担当者区分||'—'}</td>
+            <td><span class="badge ${s.契約区分==='業務委託'?'amber':s.契約区分==='半業務委託'?'blue':'gray'}">${s.契約区分||'社員'}</span></td>
+            <td style="text-align:right">${((s.アポ率||0)*100).toFixed(0)}%</td>
+            <td style="text-align:right">${((s.クロ率||0)*100).toFixed(0)}%</td>
+            <td>${s.有効フラグ?'✓':'—'}</td>
+          </tr>`).join('');
+    }
+  } catch(e) {
+    document.getElementById('staff-body').innerHTML =
+      `<tr><td colspan="6" style="color:red;padding:12px">例外: ${e.message}</td></tr>`;
+  }
 
   // 業者マスタ
-  await loadVendors();
-  const vbody = document.getElementById('vendor-body');
-  if (vbody) {
-    vbody.innerHTML = vendorList.map(v => `
-      <tr>
-        <td style="font-weight:600">${v.業者名}</td>
-        <td style="font-size:12px">${v.銀行名||'—'}</td>
-        <td style="font-size:12px">${v.支店名||'—'}</td>
-        <td style="font-size:12px">${v.口座種別||'—'}</td>
-        <td style="font-family:monospace;font-size:12px">${v.口座番号||'—'}</td>
-        <td style="font-size:12px">${v.口座名義||'—'}</td>
-        <td><button class="btn sm" onclick="editVendor(${v.id})">編集</button></td>
-      </tr>`).join('');
+  try {
+    await loadVendors();
+    const vbody = document.getElementById('vendor-body');
+    if (vbody) {
+      vbody.innerHTML = vendorList.length === 0
+        ? '<tr><td colspan="7" style="padding:12px;color:#888">データなし</td></tr>'
+        : vendorList.map(v => `
+          <tr>
+            <td style="font-weight:600">${v.業者名}</td>
+            <td style="font-size:12px">${v.銀行名||'—'}</td>
+            <td style="font-size:12px">${v.支店名||'—'}</td>
+            <td style="font-size:12px">${v.口座種別||'—'}</td>
+            <td style="font-family:monospace;font-size:12px">${v.口座番号||'—'}</td>
+            <td style="font-size:12px">${v.口座名義||'—'}</td>
+            <td><button class="btn sm" onclick="editVendor(${v.id})">編集</button></td>
+          </tr>`).join('');
+    }
+  } catch(e) {
+    const vbody = document.getElementById('vendor-body');
+    if (vbody) vbody.innerHTML =
+      `<tr><td colspan="7" style="color:red;padding:12px">例外: ${e.message}</td></tr>`;
   }
 }
 
