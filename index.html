@@ -703,10 +703,6 @@
           <div style="font-size:16px;font-weight:700;color:var(--blue)" id="od-title">案件詳細</div>
           <span id="od-koji-no" style="font-family:monospace;font-size:13px;background:var(--surface2);padding:3px 10px;border-radius:4px"></span>
           <span id="od-status-badge"></span>
-          <button onclick="openInvoiceModal()" id="od-invoice-btn"
-            style="padding:5px 12px;border:none;background:#e65100;color:#fff;font-size:12px;font-weight:600;cursor:pointer;border-radius:5px;margin-left:auto;margin-right:32px">
-            📄 請求書
-          </button>
         </div>
 
         <!-- タブ -->
@@ -807,6 +803,10 @@
             </div>
           </div>
           <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:1rem;border-top:1px solid var(--border)">
+            <button id="od-invoice-btn" onclick="openInvoiceModal()"
+              style="padding:6px 14px;border:2px solid #e65100;background:#e65100;color:#fff;font-size:13px;font-weight:600;cursor:pointer;border-radius:6px;margin-right:auto">
+              📄 請求書発行
+            </button>
             <button class="btn sm" onclick="closeOrderDetail()">キャンセル</button>
             <button class="btn sm primary" onclick="saveOrderDetail()">💾 保存</button>
           </div>
@@ -5864,7 +5864,6 @@ let _invOrderData = null;
 let _invPayments  = [];
 
 async function openInvoiceModal() {
-  alert('請求書ボタンが押されました。currentOrderId=' + currentOrderId);
   if (!currentOrderId) { showToast('案件を開いてから操作してください', true); return; }
   try {
     // 案件データ取得
