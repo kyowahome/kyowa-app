@@ -703,6 +703,10 @@
           <div style="font-size:16px;font-weight:700;color:var(--blue)" id="od-title">案件詳細</div>
           <span id="od-koji-no" style="font-family:monospace;font-size:13px;background:var(--surface2);padding:3px 10px;border-radius:4px"></span>
           <span id="od-status-badge"></span>
+          <button onclick="openInvoiceModal()" id="od-invoice-btn"
+            style="padding:5px 12px;border:none;background:#e65100;color:#fff;font-size:12px;font-weight:600;cursor:pointer;border-radius:5px;margin-left:auto;margin-right:32px">
+            📄 請求書
+          </button>
         </div>
 
         <!-- タブ -->
@@ -718,10 +722,6 @@
           <button id="od-tab-purchase-btn" onclick="switchOrderDetailTab('purchase')"
             style="padding:8px 16px;border:none;background:var(--surface2);color:var(--text-sub);font-size:13px;cursor:pointer;border-radius:6px 6px 0 0;margin-left:4px">
             発注・支払
-          </button>
-          <button onclick="openInvoiceModal()" id="od-invoice-btn"
-            style="padding:8px 14px;border:none;background:#e65100;color:#fff;font-size:13px;font-weight:600;cursor:pointer;border-radius:6px 6px 0 0;margin-left:auto">
-            📄 請求書発行
           </button>
         </div>
 
