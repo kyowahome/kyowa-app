@@ -2070,6 +2070,20 @@ function applyPermissions() {
     const bulkBtn = document.getElementById('ol-tab-bulk-btn');
     if (bulkBtn) bulkBtn.style.display = editorCan('受注一覧_一括入金入力') ? '' : 'none';
 
+    // 受注一覧：詳細編集の保存ボタン
+    const odSaveBtn = document.querySelector('#order-detail-modal button[onclick="saveOrderDetail()"]');
+    if (odSaveBtn) odSaveBtn.style.display = editorCan('受注一覧_詳細編集') ? '' : 'none';
+
+    // 営業支援：編集ボタン（動的に生成されるため関数側でも制御）
+    document.querySelectorAll('[onclick*="editProspect"]').forEach(el => {
+      el.style.display = editorCan('営業支援_編集') ? '' : 'none';
+    });
+
+    // 営業支援：計測者セレクト（動的生成のため関数側でも制御）
+    document.querySelectorAll('[onchange*="updateProspectField"][onchange*="計測者"]').forEach(el => {
+      el.closest('span') && (el.closest('span').style.display = editorCan('営業支援_計測者設定変更') ? '' : 'none');
+    });
+
     // コミッション：編集タブ・社長確認・修正入力
     const commEditTab = document.getElementById('comm-tab-edit-btn');
     if (commEditTab) commEditTab.style.display = editorCan('コミッション_編集') ? '' : 'none';
@@ -2088,8 +2102,27 @@ function applyPermissions() {
       el.style.display = editorCan('発注支払_引落管理') ? '' : 'none';
     });
 
-    // 取込：タブボタン
-    const impKoji = document.getElementById('imp-tab-kojiBtn');
+    // 受注一覧：ステータス変更ボタン
+    document.querySelectorAll('[onclick*="updateOrderStatus"]').forEach(el => {
+      el.style.display = editorCan('受注一覧_ステータス変更') ? '' : 'none';
+    });
+
+    // 受注一覧：入金保存ボタン
+    const paymentSaveBtn = document.querySelector('button[onclick="savePaymentDetail()"]');
+    if (paymentSaveBtn) paymentSaveBtn.style.display = editorCan('受注一覧_入金入力') ? '' : 'none';
+
+    // 発注：支払更新・Excel出力ボタン
+    document.querySelectorAll('[onclick*="execBulkPay"]').forEach(el => {
+      el.style.display = editorCan('発注支払_支払更新') ? '' : 'none';
+    });
+    document.querySelectorAll('[onclick*="exportBizCSV"],[onclick*="exportPurchaseExcel"]').forEach(el => {
+      el.style.display = editorCan('発注支払_Excel出力') ? '' : 'none';
+    });
+
+    // マスタ：業者追加・編集ボタン
+    document.querySelectorAll('[onclick*="showAddVendor"],[onclick*="editVendor"]').forEach(el => {
+      el.style.display = editorCan('マスタ管理_業者管理') ? '' : 'none';
+    });
     if (impKoji) impKoji.style.display = editorCan('取込_現場管理表') ? '' : 'none';
     const impReset = document.getElementById('imp-tab-resetBtn');
     if (impReset) impReset.style.display = editorCan('取込_全件入替') ? '' : 'none';
@@ -3182,6 +3215,7 @@ function calcOrderDetailProfit() {
 
 // ステータス変更
 async function updateOrderStatus(status) {
+  if (!editorCan('受注一覧_ステータス変更')) { showToast('ステータス変更の権限がありません', true); return; }
   if (!currentOrderId) return;
   await db.from('工事案件').update({ ステータス: status }).eq('id', currentOrderId);
   document.getElementById('od-status-badge').innerHTML =
@@ -3200,6 +3234,7 @@ async function updateOrderStatus(status) {
 
 // 案件基本情報を保存
 async function saveOrderDetail() {
+  if (!editorCan('受注一覧_詳細編集')) { showToast('詳細編集の権限がありません', true); return; }
   if (!currentOrderId) return;
   const kanryoVal = document.getElementById('od-kanryo')?.value || null;
   const shiharaisuEl = document.getElementById('od-shiharaisu');
@@ -3299,6 +3334,7 @@ async function loadOrderPayments() {
 }
 
 async function updatePaymentField(el) {
+  if (!editorCan('受注一覧_入金入力')) { showToast('入金情報の更新の権限がありません', true); return; }
   const id    = el.dataset.id;
   const field = el.dataset.field;
   const val   = el.value || null;
@@ -3309,6 +3345,7 @@ async function updatePaymentField(el) {
 
 // 金額フィールド用（コンマ除去して数値保存）
 async function updatePaymentFieldAmt(el) {
+  if (!editorCan('受注一覧_入金入力')) { showToast('入金金額の更新の権限がありません', true); return; }
   const id    = el.dataset.id;
   const field = el.dataset.field;
   const val   = parseAmount(el.value) || 0;
@@ -3318,6 +3355,7 @@ async function updatePaymentFieldAmt(el) {
 }
 
 async function savePaymentDetail() {
+  if (!editorCan('受注一覧_入金入力')) { showToast('入金情報の保存の権限がありません', true); return; }
   showToast('入金情報を保存しました');
   loadOrderPayments();
 }
@@ -3640,6 +3678,7 @@ function clearPurchaseProject() {
 
 // 発注保存
 async function savePurchase() {
+  if (!editorCan('発注支払_発注登録')) { showToast('発注の登録の権限がありません', true); return; }
   const vendor = document.getElementById('pm-vendor').value;
   const content = document.getElementById('pm-content').value.trim();
   if (!vendor || !content) { showToast('業者と内容は必須です', true); return; }
@@ -3688,6 +3727,7 @@ async function savePurchase() {
 
 // 発注削除
 async function deletePurchase() {
+  if (!editorCan('発注支払_発注登録')) { showToast('発注の削除の権限がありません', true); return; }
   const id = document.getElementById('pm-id').value;
   if (!id) return;
   if (!confirm('この発注データを削除しますか？')) return;
@@ -3699,6 +3739,7 @@ async function deletePurchase() {
 
 // ゆうちょBiz CSV出力
 async function exportBizCSV() {
+  if (!editorCan('発注支払_Excel出力')) { showToast('CSV出力の権限がありません', true); return; }
   // 未払いの発注を業者口座情報と合わせて取得
   const { data: list } = await db.from('発注')
     .select('*, 業者(業者名,銀行名,支店名,口座種別,口座番号,口座名義)')
@@ -3754,6 +3795,7 @@ async function exportBizCSV() {
 
 // Excel出力（発注一覧）
 async function exportPurchaseExcel() {
+  if (!editorCan('発注支払_Excel出力')) { showToast('Excel出力の権限がありません', true); return; }
   const { data: list } = await db.from('発注')
     .select('*, 業者(業者名), 工事案件(工事番号,工事名,顧客(施主名))')
     .order('登録日時', { ascending:false });
@@ -4009,6 +4051,7 @@ function updateBulkPayCount() {
 }
 
 async function execBulkPay() {
+  if (!editorCan('発注支払_支払更新')) { showToast('一括支払更新の権限がありません', true); return; }
   const payDate = document.getElementById('bp-pay-date').value;
   if (!payDate) { showToast('支払日を入力してください', true); return; }
 
@@ -4197,6 +4240,7 @@ function selectBulkProject(rowId, caseId, kojiNo, name, title) {
 }
 
 async function saveBulkPurchase() {
+  if (!editorCan('発注支払_発注登録')) { showToast('一括発注の登録の権限がありません', true); return; }
   const vendorId = document.getElementById('bpm-vendor').value;
   if (!vendorId) { showToast('業者を選択してください', true); return; }
   const validRows = bulkRows.filter(r => {
@@ -4308,6 +4352,7 @@ function closeVendorModal() {
 }
 
 async function saveVendor() {
+  if (!editorCan('マスタ管理_業者管理')) { showToast('業者マスタの更新の権限がありません', true); return; }
   const name = document.getElementById('vm-name').value.trim();
   if (!name) { showToast('業者名は必須です', true); return; }
   const id = document.getElementById('vm-id').value;
@@ -4366,6 +4411,7 @@ function toggleCorrInput() {
 
 // 修正行をcommEditDataに追加してテーブルを再描画
 async function addCorrRows() {
+  if (!editorCan('コミッション_修正入力')) { showToast('コミッション修正入力の権限がありません', true); return; }
   const kojiNo = document.getElementById('corr-kojino').value.trim();
   if (!kojiNo) { showToast('工事番号を入力してください', true); return; }
 
@@ -5264,6 +5310,7 @@ async function deleteHikioch(id) {
 }
 
 async function saveHikioch() {
+  if (!editorCan('発注支払_引落管理')) { showToast('引落管理の保存の権限がありません', true); return; }
   showToast('「＋ 行追加」から個別に追加してください');
 }
 
@@ -6362,8 +6409,8 @@ async function editProspectMemo(id, currentMemo) {
 
 // 見込み客 全項目編集フォームをモーダルで表示
 async function editProspect(id) {
+  if (!editorCan('営業支援_編集')) { showToast('編集の権限がありません', true); return; }
   const { data: p } = await db.from('見込み客').select('*').eq('id', id).single();
-  if (!p) return;
 
   const insOpts = ['','むてき+','むてき','農協','JA','損保','東京海上','県民共済','こくみん共済','三井住友','リフォーム','その他']
     .map(v => `<option value="${v}" ${p.保険種===v?'selected':''}>${v||'-- 不明 --'}</option>`).join('');
@@ -6749,6 +6796,12 @@ function scrollToProspectForm() {
 
 // フィールドを直接更新（計測者など）
 async function updateProspectField(id, field, value) {
+  if (field === '計測者' && !editorCan('営業支援_計測者設定変更')) {
+    showToast('計測者設定の権限がありません', true); return;
+  }
+  if (field !== '計測者' && !editorCan('営業支援_編集')) {
+    showToast('編集の権限がありません', true); return;
+  }
   await db.from('見込み客').update({ [field]: value || null }).eq('id', id);
   showToast(`${field}を更新しました`);
 }
