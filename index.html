@@ -1391,13 +1391,13 @@
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px">
             <div>
               <div style="font-size:10px;color:var(--text-sub);font-weight:600;margin-bottom:3px">アポ担当</div>
-              <select id="sf-apo" onchange="salesSearch()" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;background:#fff">
+              <select id="sf-apo" onchange="saveSalesFilter();salesSearch()" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;background:#fff">
                 <option value="">すべて</option>
               </select>
             </div>
             <div>
               <div style="font-size:10px;color:var(--text-sub);font-weight:600;margin-bottom:3px">計測者</div>
-              <select id="sf-sokutei" onchange="salesSearch()" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;background:#fff">
+              <select id="sf-sokutei" onchange="saveSalesFilter();salesSearch()" style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;background:#fff">
                 <option value="">すべて</option>
               </select>
             </div>
@@ -6807,6 +6807,24 @@ async function updateProspectField(id, field, value) {
 }
 
 // 営業支援ページ初期化
+// 営業支援フィルター保存・復元
+function saveSalesFilter() {
+  try {
+    localStorage.setItem('khs_sf_apo',     document.getElementById('sf-apo')?.value     || '');
+    localStorage.setItem('khs_sf_sokutei', document.getElementById('sf-sokutei')?.value || '');
+  } catch(e) {}
+}
+function restoreSalesFilter() {
+  try {
+    const apo     = localStorage.getItem('khs_sf_apo')     || '';
+    const sokutei = localStorage.getItem('khs_sf_sokutei') || '';
+    const sfApo = document.getElementById('sf-apo');
+    const sfSok = document.getElementById('sf-sokutei');
+    if (sfApo && apo)     sfApo.value     = apo;
+    if (sfSok && sokutei) sfSok.value     = sokutei;
+  } catch(e) {}
+}
+
 function initSalesPage() {
   document.getElementById('sp-date').value = new Date().toISOString().split('T')[0];
   // アポ担当・計測者セレクト
@@ -6835,7 +6853,21 @@ function initSalesPage() {
     sfSok.innerHTML = '<option value="">すべて</option><option value="__未定__">未定</option>' +
       cloStaff.map(n => `<option value="${n}">${n}</option>`).join('');
   }
-  // 初期表示
+  // フィルター値を復元してから検索
+  restoreSalesFilter();
+  // 値が保存されていれば絞込パネルを自動で開く
+  try {
+    const apo     = localStorage.getItem('khs_sf_apo')     || '';
+    const sokutei = localStorage.getItem('khs_sf_sokutei') || '';
+    if (apo || sokutei) {
+      const panel = document.getElementById('sales-filter-panel');
+      const btn   = document.getElementById('sales-filter-toggle');
+      if (panel && panel.style.display === 'none') {
+        panel.style.display = '';
+        if (btn) btn.textContent = '▲ 絞込';
+      }
+    }
+  } catch(e) {}
   salesSearch();
 }
 
