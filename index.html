@@ -5116,15 +5116,16 @@ function printCommEdit() {
 
 // ===== 権限設定 =====
 
-// 編集対象ユーザー一覧（admin以外のUSERS）
-function getPermTargetUsers() {
-  return Object.entries(USERS)
-    .filter(([id, u]) => u.role !== 'admin')
-    .map(([id, u]) => ({ id, name: u.name, role: u.role }));
-}
-
-function buildPermTable() {
-  const users = getPermTargetUsers();
+async function buildPermTable() {
+  // ユーザー設定テーブルからadmin以外を取得
+  const { data: allUsers, error } = await db.from('ユーザー設定').select('*').eq('有効', true).order('id');
+  if (error || !allUsers) {
+    document.getElementById('perm-thead').innerHTML = '<tr><td style="color:red;padding:8px">ユーザー設定の取得に失敗しました</td></tr>';
+    return;
+  }
+  const users = allUsers
+    .filter(u => u.ロール !== 'admin')
+    .map(u => ({ id: u.ログインID, name: u.名前, role: u.ロール }));
   const roleLabel = { shacho:'社長', editor:'編集者', viewer:'閲覧者' };
 
   // ヘッダー：ユーザー名
@@ -5615,7 +5616,7 @@ async function loadMaster() {
       permCard.style.display = 'none';
     } else {
       permCard.style.display = '';
-      buildPermTable();
+      await buildPermTable();
     }
   }
 
