@@ -803,7 +803,7 @@
             </div>
           </div>
           <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:1rem;border-top:1px solid var(--border)">
-            <button id="od-invoice-btn" onclick="openInvoiceModal()"
+            <button id="od-invoice-btn"
               style="padding:6px 14px;border:2px solid #e65100;background:#e65100;color:#fff;font-size:13px;font-weight:600;cursor:pointer;border-radius:6px;margin-right:auto">
               📄 請求書発行
             </button>
@@ -3244,6 +3244,18 @@ async function openOrder(id) {
     `☎ ${p.顧客?.自宅電話||'—'}　📱 ${p.顧客?.携帯電話||'—'}`;
   calcOrderDetailProfit();
   switchOrderDetailTab('basic');
+
+  // 請求書ボタンにイベントリスナーを登録（毎回上書き）
+  const invBtn = document.getElementById('od-invoice-btn');
+  if (invBtn) {
+    const newBtn = invBtn.cloneNode(true);
+    invBtn.parentNode.replaceChild(newBtn, invBtn);
+    newBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openInvoiceModal();
+    });
+  }
+
   document.getElementById('order-detail-modal').style.display = 'flex';
 }
 
