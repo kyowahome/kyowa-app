@@ -2115,10 +2115,12 @@ function showToastLogin(msg) {
 (async function initLoginScreen() {
   // 既存セッションチェック
   try {
-    const { data: { session } } = await db.auth.getSession();
+    const { data: { session }, error: sessionErr } = await db.auth.getSession();
+    console.log('session:', session, 'sessionErr:', sessionErr);
     if (session) {
-      const { data: userSetting } = await db
+      const { data: userSetting, error: settingErr } = await db
         .from('ユーザー設定').select('*').eq('id', session.user.id).single();
+      console.log('userSetting:', userSetting, 'settingErr:', settingErr);
       if (userSetting && userSetting.有効) {
         currentUser = {
           id:        userSetting.ログインID,
@@ -2131,9 +2133,13 @@ function showToastLogin(msg) {
         return;
       }
     }
-  } catch(e) {}
+  } catch(e) {
+    console.error('initLoginScreen error:', e);
+  }
   // セッションなし→ログイン画面表示
-  document.getElementById('login-screen').style.display = 'flex';
+  const ls = document.getElementById('login-screen');
+  if (ls) ls.style.display = 'flex';
+  else console.error('login-screen element not found');
 })();
 
 // ===== ナビゲーション =====
@@ -4268,32 +4274,7 @@ function calcActualPayment() {
 }
 
 // ===== 業者マスタ =====
-async function loadMaster() {
-  // 担当者
-  const { data: staff } = await db.from('担当者').select('*').order('id');
-  document.getElementById('staff-body').innerHTML = (staff||[]).map(s => `
-    <tr>
-      <td style="font-weight:600">${s.担当者名}</td>
-      <td>${s.担当者区分||'—'}</td>
-      <td><span class="badge ${s.契約区分==='業務委託'?'amber':s.契約区分==='半業務委託'?'blue':'gray'}">${s.契約区分||'社員'}</span></td>
-      <td style="text-align:right">${((s.アポ率||0)*100).toFixed(0)}%</td>
-      <td style="text-align:right">${((s.クロ率||0)*100).toFixed(0)}%</td>
-      <td>${s.有効フラグ?'✓':'—'}</td>
-    </tr>`).join('');
-
-  // 業者
-  await loadVendors();
-  document.getElementById('vendor-body').innerHTML = vendorList.map(v => `
-    <tr>
-      <td style="font-weight:600">${v.業者名}</td>
-      <td style="font-size:12px">${v.銀行名||'—'}</td>
-      <td style="font-size:12px">${v.支店名||'—'}</td>
-      <td style="font-size:12px">${v.口座種別||'—'}</td>
-      <td style="font-family:monospace;font-size:12px">${v.口座番号||'—'}</td>
-      <td style="font-size:12px">${v.口座名義||'—'}</td>
-      <td><button class="btn sm" onclick="editVendor(${v.id})">編集</button></td>
-    </tr>`).join('');
-}
+// loadMaster は下部（権限設定統合版）に定義
 
 function showAddVendor() {
   document.getElementById('vm-title').textContent = '業者登録';
@@ -5631,6 +5612,7 @@ async function loadMaster() {
     }
   }
 
+  // 担当者マスタ
   const { data } = await db.from('担当者').select('*').order('id');
   const tbody = document.getElementById('staff-body');
   tbody.innerHTML = (data||[]).map(s => `
@@ -5642,6 +5624,22 @@ async function loadMaster() {
       <td style="text-align:right">${((s.クロ率||0)*100).toFixed(0)}%</td>
       <td>${s.有効フラグ?'✓':'—'}</td>
     </tr>`).join('');
+
+  // 業者マスタ
+  await loadVendors();
+  const vbody = document.getElementById('vendor-body');
+  if (vbody) {
+    vbody.innerHTML = vendorList.map(v => `
+      <tr>
+        <td style="font-weight:600">${v.業者名}</td>
+        <td style="font-size:12px">${v.銀行名||'—'}</td>
+        <td style="font-size:12px">${v.支店名||'—'}</td>
+        <td style="font-size:12px">${v.口座種別||'—'}</td>
+        <td style="font-family:monospace;font-size:12px">${v.口座番号||'—'}</td>
+        <td style="font-size:12px">${v.口座名義||'—'}</td>
+        <td><button class="btn sm" onclick="editVendor(${v.id})">編集</button></td>
+      </tr>`).join('');
+  }
 }
 
 // ===== 郵便番号自動入力 =====
