@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>協和ホームサービス 受発注管理システム v9</title>
+<title>協和ホームサービス 受発注管理システム</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
@@ -2232,13 +2232,8 @@ async function init() {
 
   // 請求書ボタン：documentレベルで登録（最も確実な方法）
   document.addEventListener('click', function(e) {
-    // デバッグ：クリックされた要素をログ
-    if (e.target.closest('#order-detail-modal')) {
-      console.log('modal click:', e.target.tagName, e.target.id, e.target.textContent?.trim().slice(0,20));
-    }
     const btn = e.target.closest('#od-invoice-btn');
     if (btn) {
-      console.log('invoice button clicked via document listener');
       openInvoiceModal();
     }
   });
@@ -5822,27 +5817,21 @@ let _invOrderData = null;
 let _invPayments  = [];
 
 async function openInvoiceModal() {
-  console.log('openInvoiceModal called, currentOrderId=', currentOrderId);
   if (!currentOrderId) { showToast('案件を開いてから操作してください', true); return; }
   try {
-    console.log('step1: querying 工事案件...');
     // 案件データ取得
     const { data: p, error: pErr } = await db.from('工事案件')
       .select('*, 顧客(施主名,郵便番号,現場住所,自宅電話,携帯電話)')
       .eq('id', currentOrderId).single();
-    console.log('step2: p=', p, 'pErr=', pErr);
     if (pErr) throw new Error('案件取得エラー: ' + pErr.message);
     if (!p) throw new Error('案件データが見つかりません');
 
-    console.log('step3: querying 入金...');
     const { data: pays, error: payErr } = await db.from('入金')
       .select('*').eq('案件id', currentOrderId).order('id');
-    console.log('step4: pays=', pays, 'payErr=', payErr);
     if (payErr) throw new Error('入金取得エラー: ' + payErr.message);
     _invOrderData = p;
     _invPayments  = pays || [];
 
-    console.log('step5: updating UI...');
     document.getElementById('inv-case-title').textContent =
       `${p.工事番号} ／ ${p.顧客?.施主名||'—'} ／ 契約金額 ¥${Number(p.契約金額||0).toLocaleString()}`;
     document.getElementById('inv-date').value = new Date().toISOString().split('T')[0];
@@ -5852,14 +5841,10 @@ async function openInvoiceModal() {
     const br = (p.支店||'').includes('岩手') ? 'iwate' : (p.支店||'').includes('仙台') ? 'sendai' : 'yamagata';
     branchSel.value = `${co}_${br}`;
 
-    console.log('step6: renderInvoicePattern...');
     renderInvoicePattern();
 
-    console.log('step7: showing modal...');
     const modal = document.getElementById('invoice-modal');
-    console.log('modal element=', modal);
     modal.style.display = 'flex';
-    console.log('step8: modal.style.display=', modal.style.display);
   } catch(e) {
     showToast('請求書モーダルエラー: ' + e.message, true);
     console.error('openInvoiceModal error:', e);
