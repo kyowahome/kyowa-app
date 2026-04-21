@@ -1290,7 +1290,10 @@
           <div id="comm-edit-period" style="font-size:12px;color:var(--blue);font-weight:600;margin-bottom:8px"></div>
           <!-- 修正入力欄 -->
           <div id="corr-input-area" style="display:none;background:#fff5f5;border:1px solid #fcc;border-radius:8px;padding:10px 12px;margin-bottom:10px">
-            <div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:6px">✏️ 修正入力：工事番号を入力して追加</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="font-size:12px;font-weight:600;color:var(--red)">✏️ 修正入力：工事番号を入力して追加</div>
+              <button class="btn sm" onclick="toggleCorrInput()" style="font-size:11px;padding:2px 10px">✕ 閉じる</button>
+            </div>
             <div style="display:flex;gap:8px;align-items:center">
               <input type="text" id="corr-kojino" placeholder="例: 2603-010"
                 style="width:160px;padding:6px 8px;border:1px solid #fcc;border-radius:5px;font-size:13px"
@@ -1319,7 +1322,8 @@
                 style="width:90px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;font-weight:600;color:var(--text)"
                 onkeydown="if(event.key==='Enter')calcCommission()">
               <button class="btn sm primary" onclick="calcCommission()">集計実行</button>
-              <button class="btn sm" onclick="printCommission()">🖨 印刷</button>
+              <button class="btn sm" onclick="printCommission()">🖨 一覧印刷</button>
+              <button class="btn sm" onclick="printCommissionAll()" style="background:#2c5f3f;color:#fff;border-color:#2c5f3f">🖨 担当者別印刷</button>
             </div>
           </div>
           <div style="font-size:12px;color:var(--text-hint);margin-bottom:4px">
@@ -1348,7 +1352,10 @@
         <div class="card" id="comm-detail-card" style="display:none">
           <div class="card-title">
             <span id="comm-detail-title">明細</span>
-            <button class="btn sm" onclick="document.getElementById('comm-detail-card').style.display='none'">閉じる</button>
+            <div style="display:flex;gap:6px">
+              <button class="btn sm" onclick="printCommDetail()">🖨 印刷</button>
+              <button class="btn sm" onclick="document.getElementById('comm-detail-card').style.display='none'">閉じる</button>
+            </div>
           </div>
           <div class="tbl-wrap">
             <table class="th-orange">
@@ -5682,7 +5689,108 @@ function printCommission() {
   win.document.close();
 }
 
-// ===== マスタ =====
+// 担当者別内訳印刷（担当者ごとに1ページずつ）
+function printCommissionAll() {
+  const ym = document.getElementById('comm-month').value.trim();
+  if (commCurrentData.length === 0) { showToast('先に集計実行してください', true); return; }
+  const y = 2000 + parseInt(ym.slice(0,2));
+  const m = parseInt(ym.slice(2,4));
+  const prevY = m===1 ? y-1 : y, prevM = m===1 ? 12 : m-1;
+  const payY  = m===12 ? y+1 : y, payM  = m===12 ? 1 : m+1;
+
+  const pages = commCurrentData.map(r => {
+    const sortedCases = [...r.cases].sort((a,b) => (b.工事番号||'').localeCompare(a.工事番号||''));
+    const rows = sortedCases.map(p => {
+      const excl    = Math.round(Number(p.契約金額||0) / 1.1);
+      const shikiri = Number(p.社内仕切税抜||0);
+      const gross   = excl - shikiri;
+      const profit  = Math.round(gross * 0.6);
+      return `<tr>
+        <td style="font-family:monospace;font-size:11px">${p.工事番号||'—'}</td>
+        <td>${p.顧客?.施主名||'—'}</td>
+        <td style="font-size:11px;color:#555">${p.顧客?.エリア||'—'}</td>
+        <td>${p.工事名||'—'}</td>
+        <td style="text-align:right">${p.契約日||'—'}</td>
+        <td style="text-align:right">${excl.toLocaleString()}</td>
+        <td style="text-align:right">${shikiri.toLocaleString()}</td>
+        <td style="text-align:right">${profit.toLocaleString()}</td>
+        <td style="text-align:right">${(p._rate*100).toFixed(0)}%</td>
+        <td style="text-align:right;font-weight:700;color:#d4813a">${p._comm.toLocaleString()}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="page-block">
+      <h2>${r.name}（${r.role}）</h2>
+      <div class="sub">${y}年${m}月度　集計期間: ${prevY}年${prevM}月26日〜${y}年${m}月25日　支払予定: ${payY}年${payM}月10日</div>
+      <table>
+        <thead><tr>
+          <th>工事番号</th><th>施主名</th><th>エリア</th><th>工事名</th><th>契約日</th>
+          <th>契約金税除</th><th>社内仕切</th><th>見込利益</th><th>率</th><th>コミッション</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="total-line">
+        ${r.cnt}件　契約金額計: ¥${Math.round(r.amtSum).toLocaleString()}　
+        コミッション合計: ¥${r.comm.toLocaleString()}
+      </div>
+    </div>`;
+  }).join('');
+
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+    <title>コミッション内訳 ${y}年${m}月</title>
+    <style>
+      @media print{.no-print{display:none} .page-block{page-break-after:always}}
+      body{font-family:'Meiryo',sans-serif;padding:16px;font-size:12px}
+      .page-block{margin-bottom:40px}
+      h2{color:#1a3a5c;font-size:16px;margin-bottom:4px;border-bottom:2px solid #1a3a5c;padding-bottom:4px}
+      .sub{color:#666;font-size:11px;margin-bottom:10px}
+      table{width:100%;border-collapse:collapse;margin-bottom:8px}
+      th{background:#1a3a5c;color:#fff;padding:5px 8px;font-size:11px;text-align:left}
+      td{padding:5px 8px;border-bottom:1px solid #eee;font-size:11px}
+      tr:nth-child(even) td{background:#f5f8ff}
+      .total-line{text-align:right;font-weight:700;color:#d4813a;font-size:13px;padding:6px 0}
+      .no-print{text-align:center;margin-bottom:16px}
+      .no-print button{padding:8px 20px;font-size:13px;border:none;border-radius:4px;cursor:pointer;background:#1a3a5c;color:#fff}
+    </style></head><body>
+    <div class="no-print"><button onclick="window.print()">🖨 担当者別内訳を印刷する</button></div>
+    ${pages}
+    </body></html>`);
+  win.document.close();
+}
+
+// 現在表示中の明細を印刷
+function printCommDetail() {
+  const titleEl = document.getElementById('comm-detail-title');
+  const title   = titleEl ? titleEl.textContent : '明細';
+  const tbody   = document.getElementById('comm-detail-body');
+  if (!tbody || !tbody.innerHTML.trim()) { showToast('明細を開いてから押してください', true); return; }
+  const ym = document.getElementById('comm-month').value.trim();
+  const y  = 2000 + parseInt(ym.slice(0,2)||'0');
+  const m  = parseInt(ym.slice(2,4)||'0');
+  const prevY = m===1 ? y-1 : y, prevM = m===1 ? 12 : m-1;
+  const payY  = m===12 ? y+1 : y, payM  = m===12 ? 1 : m+1;
+  const theadEl = tbody.closest('table')?.querySelector('thead');
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+    <title>${title}</title>
+    <style>
+      @media print{button{display:none}}
+      body{font-family:'Meiryo',sans-serif;padding:16px;font-size:12px}
+      h2{color:#1a3a5c;font-size:15px;margin-bottom:4px}
+      .sub{color:#666;font-size:11px;margin-bottom:12px}
+      table{width:100%;border-collapse:collapse}
+      th{background:#1a3a5c;color:#fff;padding:5px 8px;font-size:11px;text-align:left}
+      td{padding:5px 8px;border-bottom:1px solid #eee;font-size:11px}
+      tr:nth-child(even) td{background:#f5f8ff}
+    </style></head><body>
+    <h2>${title}</h2>
+    <div class="sub">${y}年${m}月度　集計期間: ${prevY}年${prevM}月26日〜${y}年${m}月25日　支払予定: ${payY}年${payM}月10日</div>
+    <table>${theadEl ? theadEl.outerHTML : ''}<tbody>${tbody.innerHTML}</tbody></table>
+    <br><button onclick="window.print()">🖨 印刷する</button>
+    </body></html>`);
+  win.document.close();
+}
+
 async function loadMaster() {
   // 権限設定UIを生成（管理者のみ表示）
   const permCard = document.getElementById('perm-settings-card');
@@ -6266,13 +6374,16 @@ function printReceipt() {
   const payIdx = sel ? parseInt(sel.value) : 0;
   const pay  = pays[payIdx] || {};
   const co   = INVOICE_COMPANIES[document.getElementById('inv-branch').value];
-  const invDate = document.getElementById('inv-date').value;
+  const invDate  = document.getElementById('inv-date').value;
   const custName = p.顧客?.施主名 || '';
   const kojiName = p.工事名 || '工事';
-  const count = Number(p.支払回数||1);
-  const amt   = Number(pay.入金金額 || pay.請求金額 || 0);
-  const label = getPaymentLabel(payIdx, count);
-  const invDateJp = toJpDate(invDate);
+  const count    = Number(p.支払回数||1);
+  const amt      = Number(pay.入金金額 || pay.請求金額 || 0);
+  const label    = getPaymentLabel(payIdx, count);
+  const invDateJp    = toJpDate(invDate);
+  // 受領日：入金日があればそれを、なければ請求日、なければ請求書日付
+  const nyukinDate   = pay.入金日 || pay.請求日 || invDate;
+  const nyukinDateJp = toJpDate(nyukinDate);
 
   const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>領収書</title>
 ${_printCSS(`
@@ -6303,7 +6414,8 @@ ${_printCSS(`
   <div class="details">
     工事番号：${p.工事番号||''}<br>
     工　事　名：${kojiName}<br>
-    内　　訳：${label}
+    内　　訳：${label}<br>
+    受　領　日：${nyukinDateJp}
   </div>
   <div class="confirm">上記の金額を正に領収いたしました。</div>
   <div class="tadashi">但し、${kojiName} ${label} として</div>
