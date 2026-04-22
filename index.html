@@ -2503,11 +2503,11 @@ async function loadDashboard() {
   const { data: allCases } = await q1;
   const cases = allCases || [];
 
-  // 見込み客データ（申込件数）：申込日が今年・キャンセル以外・全進捗
+  // 見込み客データ（申込件数）：訪問日が今年・キャンセル以外・全進捗
   const { data: allProspects } = await db.from('見込み客')
-    .select('申込日,アポ担当')
-    .gte('申込日', thisFrom).lte('申込日', thisTo)
-    .not('申込日','is',null)
+    .select('訪問日,アポ担当')
+    .gte('訪問日', thisFrom).lte('訪問日', thisTo)
+    .not('訪問日','is',null)
     .not('進捗ステータス','eq','キャンセル');
   const apps = allProspects || [];
 
@@ -2520,33 +2520,30 @@ async function loadDashboard() {
 
   // 入金データ（未収分：入金日なし・請求金額3000円超）
   const { data: unpaidData } = await db.from('入金')
-    .select('請求金額,入金金額,入金日,案件id,工事案件(ステータス,完了日)')
+    .select('請求金額,入金金額,案件id')
     .is('入金日', null).gt('請求金額', 3000);
   const unpaid = unpaidData || [];
 
   // ===== KPIカード =====
-  // 完了後未収（ステータス=完了 or 完工 かつ 入金日なし）
-  const kanryoUnpaid = unpaid.filter(r => {
-    const s = r.工事案件?.ステータス || '';
-    return s === '完了' || s === '完工';
-  });
-  // 件数は案件数（案件idの重複排除）
-  const kanryoCaseIds = new Set(kanryoUnpaid.map(r => r.案件id));
-  const kanryoCnt = kanryoCaseIds.size;
-  const kanryoAmt = kanryoUnpaid.reduce((s,r) => {
-    const billing = Number(r.請求金額||0);
-    const paid    = Number(r.入金金額||0);
-    return s + Math.max(0, billing - paid);
-  }, 0);
-
-  // 入金待ち（全体・案件数）
-  const unpaidCaseIds = new Set(unpaid.map(r => r.案件id));
+  // 入金待ち全体（案件数・金額）
+  const unpaidCaseIds = new Set(unpaid.map(r => r.案件id).filter(Boolean));
   const unpaidCnt = unpaidCaseIds.size;
-  const unpaidAmt = unpaid.reduce((s,r) => {
-    const billing = Number(r.請求金額||0);
-    const paid    = Number(r.入金金額||0);
-    return s + Math.max(0, billing - paid);
-  }, 0);
+  const unpaidAmt = unpaid.reduce((s,r) => s + Math.max(0, Number(r.請求金額||0) - Number(r.入金金額||0)), 0);
+
+  // 完了後未収：案件idから工事案件のステータスを別途取得
+  let kanryoCnt = 0, kanryoAmt = 0;
+  if (unpaidCaseIds.size > 0) {
+    const ids = [...unpaidCaseIds];
+    const { data: caseData } = await db.from('工事案件')
+      .select('id,ステータス')
+      .in('id', ids)
+      .in('ステータス', ['完了','完工']);
+    const completedIds = new Set((caseData||[]).map(c => c.id));
+    const kanryoRecs = unpaid.filter(r => completedIds.has(r.案件id));
+    const kanryoCase = new Set(kanryoRecs.map(r => r.案件id));
+    kanryoCnt = kanryoCase.size;
+    kanryoAmt = kanryoRecs.reduce((s,r) => s + Math.max(0, Number(r.請求金額||0) - Number(r.入金金額||0)), 0);
+  }
 
   document.getElementById('kpi-kanryo-cnt').textContent = kanryoCnt + '件';
   document.getElementById('kpi-kanryo-amt').textContent = (kanryoAmt/1000000).toFixed(1) + '百万';
@@ -2627,7 +2624,7 @@ async function loadDashboard() {
   const STAFF_APO = ['守','武田','大石','引地','板垣','後藤'];
   const staffApps = _buildStaffData(
     apps, STAFF_APO,
-    a => a.アポ担当,
+    a => a.アポ担当 || '他',
     () => 1
   );
   _buildStaffChart('chart-staff-apps', staffApps, v => Number(v), '件');
@@ -2692,27 +2689,41 @@ function _buildStaffData(rows, staffList, getStaff, getValue) {
 function _buildStaffChart(canvasId, staffData, toDisplay, unit) {
   const COLORS = ['#1565c0','#2e7d32','#e65100','#6a1b9a','#00838f','#c62828','#37474f'];
   const labels = staffData.map(d => d.name);
-  // data は数値のまま渡す（Chartが正しく描画できるよう）
-  const values = staffData.map(d => Number(toDisplay(d.val)));
-  _buildChart(canvasId, 'bar', {
-    labels,
-    datasets: [{
-      data: values,
-      backgroundColor: labels.map((_,i) => COLORS[i % COLORS.length]),
-      borderRadius: 3,
-    }],
-  }, {
-    plugins: {
-      legend: {display: false},
-      tooltip: {callbacks: {label: ctx => ctx.raw + unit}},
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {callback: v => v + unit},
-      },
-    },
+  const values = staffData.map(d => {
+    const v = toDisplay(d.val);
+    return typeof v === 'string' ? parseFloat(v) || 0 : Number(v) || 0;
   });
+  if (_charts[canvasId]) { _charts[canvasId].destroy(); delete _charts[canvasId]; }
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  try {
+    _charts[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: labels.map((_, i) => COLORS[i % COLORS.length]),
+          borderRadius: 3,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx2 => ctx2.raw + unit } },
+        },
+        scales: {
+          x: { ticks: { font: { size: 10 } } },
+          y: {
+            beginAtZero: true,
+            ticks: { font: { size: 10 }, callback: v => v + unit },
+          },
+        },
+      },
+    });
+  } catch(e) { console.error('StaffChart error:', canvasId, e); }
 }
 
 // Chart.js共通ビルダー（既存チャートを破棄して再生成）
@@ -2762,18 +2773,25 @@ function _jumpToMonthOrders(year, month) {
   }, 50);
 }
 
-// 未収一覧へジャンプ
+// 未収一覧へジャンプ（入金一覧タブ）
 function goToUnpaidList(type) {
-  const el1 = document.getElementById('list-date-from');
-  const el2 = document.getElementById('list-date-to');
-  const stEl = document.getElementById('list-status');
-  if (el1) el1.value = '';
-  if (el2) el2.value = '';
-  if (stEl) stEl.value = (type === 'kanryo') ? '完工' : '';
+  // 入金一覧タブのフィルターを先にセット
+  const plStatus = document.getElementById('pl-status');
+  if (plStatus) {
+    // 完了後未収 → '完了未収'、入金待ち全体 → '未収'（デフォルト）
+    plStatus.value = (type === 'kanryo') ? '完了未収' : '未収';
+  }
+  // 日付フィルターをクリア
+  ['pl-date-from','pl-date-to','pl-pay-from','pl-pay-to'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const apoEl = document.getElementById('pl-apo'); if (apoEl) apoEl.value = '';
+
+  // 受注一覧ページへ移動（skipClear=true）
   showPage('order-list', null, true);
+
   setTimeout(() => {
-    const panel = document.getElementById('order-filter-panel');
-    if (panel && panel.style.display === 'none') toggleOrderFilter();
+    // 入金一覧タブへ切替（loadPaymentListが呼ばれてpl-statusで絞り込まれる）
     switchOrderListTab('payment');
   }, 50);
 }
