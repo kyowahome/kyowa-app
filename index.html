@@ -6391,31 +6391,35 @@ async function loadMaster() {
 // ===== ダッシュボードKPI（入金一覧と同じ計算） =====
 async function loadUnpaidKpi() {
   try {
-    // ステップ1：全工事案件を取得
-    let q = db.from('工事案件')
-      .select('id,ステータス,契約金額');
-    if (currentCompany !== '共通') q = q.eq('会社区分', currentCompany);
-    const { data: allC, error: allCErr } = await q.limit(5000);
-
-    // デバッグ：コンソールに出力
-    console.log('[KPI] currentCompany:', currentCompany);
-    console.log('[KPI] allC件数:', allC?.length, '/ error:', allCErr?.message);
-    if (allC && allC.length > 0) {
-      console.log('[KPI] 先頭レコード例:', JSON.stringify(allC[0]));
+    // 入金一覧と同じ計算：Σ(請求金額 - 入金金額) per installment が未収
+    // 入金テーブルから全レコードを取得（請求金額 > 0 のもの）
+    let allPays = [];
+    let offset  = 0;
+    const CHUNK = 1000;
+    while (true) {
+      const { data: chunk } = await db.from('入金')
+        .select('案件id,請求金額,入金金額')
+        .gt('請求金額', 0)
+        .range(offset, offset + CHUNK - 1);
+      if (!chunk || chunk.length === 0) break;
+      allPays = allPays.concat(chunk);
+      if (chunk.length < CHUNK) break;
+      offset += CHUNK;
     }
 
-    if (allCErr) {
-      document.getElementById('kpi-unpaid-cnt').textContent = 'ERR';
-      console.error('[KPI] queryエラー:', allCErr);
-      return;
-    }
+    // 案件idごとに未収額を集計
+    const unpaidMap = {}; // {案件id: 未収合計}
+    allPays.forEach(p => {
+      const remain = Math.max(0, Number(p.請求金額||0) - Number(p.入金金額||0));
+      if (remain > 0) {
+        unpaidMap[p.案件id] = (unpaidMap[p.案件id] || 0) + remain;
+      }
+    });
 
-    const validCases = (allC || []).filter(c =>
-      c.ステータス !== '失注' && Number(c.契約金額 || 0) > 0
-    );
-    console.log('[KPI] validCases件数:', validCases.length);
+    // 未収3000円以上の案件IDを抽出
+    const unpaidCaseIds = Object.keys(unpaidMap).filter(id => unpaidMap[id] >= 3000).map(Number);
 
-    if (validCases.length === 0) {
+    if (unpaidCaseIds.length === 0) {
       document.getElementById('kpi-kanryo-cnt').textContent = '0件';
       document.getElementById('kpi-kanryo-amt').textContent = '0.0百万';
       document.getElementById('kpi-unpaid-cnt').textContent = '0件';
@@ -6423,25 +6427,20 @@ async function loadUnpaidKpi() {
       return;
     }
 
-    // ステップ2：入金の支払済合計を集計
-    const ids = validCases.map(c => c.id);
-    const paidMap = {};
-    for (let i = 0; i < ids.length; i += 200) {
-      const { data: pays } = await db.from('入金')
-        .select('案件id,入金金額')
-        .in('案件id', ids.slice(i, i + 200));
-      (pays || []).forEach(p => {
-        paidMap[p.案件id] = (paidMap[p.案件id] || 0) + Number(p.入金金額 || 0);
-      });
+    // 工事案件のステータスを取得（失注除く）
+    let caseStatuses = [];
+    for (let i = 0; i < unpaidCaseIds.length; i += 200) {
+      const { data: cs } = await db.from('工事案件')
+        .select('id,ステータス')
+        .in('id', unpaidCaseIds.slice(i, i + 200));
+      if (cs) caseStatuses = caseStatuses.concat(cs);
     }
-    console.log('[KPI] paidMapのキー数:', Object.keys(paidMap).length);
 
-    // ステップ3：未収判定
+    // 未収・完了後未収を集計
     let unpaidCnt = 0, unpaidAmt = 0, kanryoCnt = 0, kanryoAmt = 0;
-    validCases.forEach(c => {
-      const contract = Number(c.契約金額 || 0);
-      const paid     = paidMap[c.id] || 0;
-      const remain   = contract - paid;
+    caseStatuses.forEach(c => {
+      if (c.ステータス === '失注') return;
+      const remain = unpaidMap[c.id] || 0;
       if (remain < 3000) return;
       unpaidCnt++;
       unpaidAmt += remain;
@@ -6450,8 +6449,8 @@ async function loadUnpaidKpi() {
         kanryoAmt += remain;
       }
     });
-    console.log('[KPI] 結果 unpaid:', unpaidCnt, '件, kanryo:', kanryoCnt, '件');
 
+    console.log('[KPI] 完了 unpaid:', unpaidCnt, 'kanryo:', kanryoCnt);
     document.getElementById('kpi-kanryo-cnt').textContent = kanryoCnt + '件';
     document.getElementById('kpi-kanryo-amt').textContent = (kanryoAmt / 1000000).toFixed(1) + '百万';
     document.getElementById('kpi-unpaid-cnt').textContent = unpaidCnt + '件';
