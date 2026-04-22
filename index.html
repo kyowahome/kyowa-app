@@ -2517,31 +2517,37 @@ async function loadDashboard() {
     .not('計測日','is',null);
   const sokuteis = sokuteiData || [];
 
-  // ===== KPIカード（入金一覧と同じロジックで計算） =====
-  // 未収＝工事案件の契約金額 - Σ入金金額 >= 3000（失注除く）
+  // ===== KPIカード（入金一覧と同じロジック） =====
   // ①全工事案件取得（失注除く・契約金額あり）
-  let q_cases = db.from('工事案件').select('id,ステータス,契約金額').neq('ステータス','失注').gt('契約金額',0);
-  if (currentCompany !== '共通') q_cases = q_cases.eq('会社区分', currentCompany);
-  const { data: allCasesKpi } = await q_cases.range(0, 2000);
-  const caseKpiList = allCasesKpi || [];
+  let kpiQ = db.from('工事案件')
+    .select('id,ステータス,契約金額')
+    .not('ステータス','eq','失注')
+    .not('ステータス','is',null)
+    .limit(3000);
+  if (currentCompany !== '共通') kpiQ = kpiQ.eq('会社区分', currentCompany);
+  const { data: kpiCases, error: kpiErr } = await kpiQ;
+  if (kpiErr) console.error('KPI cases error:', kpiErr);
+  const kpiCaseList = (kpiCases || []).filter(c => Number(c.契約金額||0) > 0);
 
-  // ②全入金取得（支払済合計を案件idで集計）
-  const caseKpiIds = caseKpiList.map(c => c.id);
-  let allPaysKpi = [];
-  for (let i = 0; i < caseKpiIds.length; i += 200) {
-    const { data: bp } = await db.from('入金').select('案件id,入金金額').in('案件id', caseKpiIds.slice(i,i+200));
-    if (bp) allPaysKpi = allPaysKpi.concat(bp);
-  }
+  // ②入金テーブルから支払済合計を取得（案件id単位）
+  const kpiIds = kpiCaseList.map(c => c.id);
   const paidMapKpi = {};
-  allPaysKpi.forEach(p => { paidMapKpi[p.案件id] = (paidMapKpi[p.案件id]||0) + Number(p.入金金額||0); });
+  for (let i = 0; i < kpiIds.length; i += 200) {
+    const { data: bp } = await db.from('入金')
+      .select('案件id,入金金額')
+      .in('案件id', kpiIds.slice(i, i + 200));
+    (bp || []).forEach(p => {
+      paidMapKpi[p.案件id] = (paidMapKpi[p.案件id] || 0) + Number(p.入金金額 || 0);
+    });
+  }
 
-  // ③未収判定
+  // ③未収判定（入金一覧の「未収」「完了未収」と同じ基準）
   let unpaidCnt = 0, unpaidAmt = 0, kanryoCnt = 0, kanryoAmt = 0;
-  caseKpiList.forEach(c => {
-    const amt     = Number(c.契約金額||0);
-    const paid    = paidMapKpi[c.id] || 0;
-    const remain  = amt - paid;
-    if (remain < 3000) return;          // 未収3000円未満は除外
+  kpiCaseList.forEach(c => {
+    const contractAmt = Number(c.契約金額 || 0);
+    const paid        = paidMapKpi[c.id] || 0;
+    const remain      = contractAmt - paid;
+    if (remain < 3000) return;
     unpaidCnt++;
     unpaidAmt += remain;
     if (c.ステータス === '完了' || c.ステータス === '完工') {
@@ -2551,9 +2557,9 @@ async function loadDashboard() {
   });
 
   document.getElementById('kpi-kanryo-cnt').textContent = kanryoCnt + '件';
-  document.getElementById('kpi-kanryo-amt').textContent = (kanryoAmt/1000000).toFixed(1) + '百万';
+  document.getElementById('kpi-kanryo-amt').textContent = (kanryoAmt / 1000000).toFixed(1) + '百万';
   document.getElementById('kpi-unpaid-cnt').textContent = unpaidCnt + '件';
-  document.getElementById('kpi-unpaid-amt').textContent = (unpaidAmt/1000000).toFixed(1) + '百万';
+  document.getElementById('kpi-unpaid-amt').textContent = (unpaidAmt / 1000000).toFixed(1) + '百万';
 
   // ===== 月別契約金額グラフ =====
   const months = Array.from({length:12}, (_,i) => i+1);
