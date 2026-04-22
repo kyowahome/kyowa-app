@@ -6,6 +6,7 @@
 <title>協和ホームサービス 受発注管理システム</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Hiragino Kaku Gothic ProN','Meiryo',sans-serif;background:#f5f5f0;color:#1a1a1a;font-size:14px}
@@ -220,12 +221,80 @@
 
     <!-- ダッシュボード -->
     <div class="page show" id="page-dashboard">
-      <div class="kpi-grid" id="kpi-area">
-        <div class="kpi"><div class="kpi-label">今月受注件数</div><div class="kpi-val blue" id="kpi-cnt">—</div><div class="kpi-sub">読込中...</div></div>
-        <div class="kpi"><div class="kpi-label">今月受注金額</div><div class="kpi-val blue" id="kpi-amt">—</div><div class="kpi-sub" id="kpi-amt-sub">—</div></div>
-        <div class="kpi"><div class="kpi-label">入金待ち案件</div><div class="kpi-val amber" id="kpi-unpaid">—</div><div class="kpi-sub">未収金額</div></div>
-        <div class="kpi"><div class="kpi-label">今月平均粗利率</div><div class="kpi-val green" id="kpi-margin">—</div><div class="kpi-sub">見込みベース</div></div>
+      <!-- KPIカード行 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <!-- 完了後未収 -->
+        <div class="card" style="cursor:pointer;margin-bottom:0" onclick="goToUnpaidList('kanryo')" title="クリックで一覧表示">
+          <div style="font-size:11px;color:var(--text-sub);margin-bottom:6px">📋 完了後未収案件</div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-end">
+            <div>
+              <div style="font-size:11px;color:var(--text-sub)">件数</div>
+              <div style="font-size:24px;font-weight:700;color:#c0392b" id="kpi-kanryo-cnt">—</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:11px;color:var(--text-sub)">未収合計</div>
+              <div style="font-size:20px;font-weight:700;color:#c0392b" id="kpi-kanryo-amt">—</div>
+              <div style="font-size:10px;color:var(--text-hint)">百万円（小数1位）</div>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--text-hint);margin-top:4px">▶ クリックで一覧</div>
+        </div>
+        <!-- 入金待ち -->
+        <div class="card" style="cursor:pointer;margin-bottom:0" onclick="goToUnpaidList('unpaid')" title="クリックで一覧表示">
+          <div style="font-size:11px;color:var(--text-sub);margin-bottom:6px">⏳ 入金待ち案件</div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-end">
+            <div>
+              <div style="font-size:11px;color:var(--text-sub)">件数</div>
+              <div style="font-size:24px;font-weight:700;color:var(--amber)" id="kpi-unpaid-cnt">—</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:11px;color:var(--text-sub)">未収合計</div>
+              <div style="font-size:20px;font-weight:700;color:var(--amber)" id="kpi-unpaid-amt">—</div>
+              <div style="font-size:10px;color:var(--text-hint)">百万円（小数1位）</div>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--text-hint);margin-top:4px">▶ クリックで一覧</div>
+        </div>
       </div>
+
+      <!-- グラフ行1：月別契約金額 -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:8px">
+          月別契約金額（今年 vs 昨年）
+          <span style="font-size:11px;color:var(--text-hint);font-weight:400">百万円　※今月バーをクリックで受注一覧へ</span>
+        </div>
+        <div style="position:relative;height:220px">
+          <canvas id="chart-monthly"></canvas>
+        </div>
+        <div id="chart-monthly-totals" style="display:flex;gap:16px;margin-top:6px;font-size:11px;color:var(--text-sub);padding-left:8px"></div>
+      </div>
+
+      <!-- グラフ行2：担当別・申込・計測 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+        <!-- 担当別契約額 -->
+        <div class="card" style="margin-bottom:0">
+          <div style="font-size:12px;font-weight:600;margin-bottom:6px">担当別契約額（今年・百万円）</div>
+          <div style="position:relative;height:180px">
+            <canvas id="chart-staff-amt"></canvas>
+          </div>
+        </div>
+        <!-- 担当別申込件数 -->
+        <div class="card" style="margin-bottom:0">
+          <div style="font-size:12px;font-weight:600;margin-bottom:6px">担当別申込件数（今年）</div>
+          <div style="position:relative;height:180px">
+            <canvas id="chart-staff-apps"></canvas>
+          </div>
+        </div>
+        <!-- 担当別計測件数 -->
+        <div class="card" style="margin-bottom:0">
+          <div style="font-size:12px;font-weight:600;margin-bottom:6px">担当別計測件数（今年）</div>
+          <div style="position:relative;height:180px">
+            <canvas id="chart-staff-sokutei"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 最近の受注 -->
       <div class="card">
         <div class="card-title">最近の受注（直近10件）</div>
         <div class="tbl-wrap">
@@ -1291,6 +1360,7 @@
                 style="width:90px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;font-weight:600;color:var(--text)"
                 onkeydown="if(event.key==='Enter')loadCommEdit()">
               <button class="btn sm primary" onclick="loadCommEdit()">読み込み</button>
+              <button class="btn sm" onclick="clearCommEdit()" style="background:#666;color:#fff;border-color:#666">✕ クリア</button>
               <button class="btn sm success" onclick="saveCommEdit()" id="comm-save-btn" style="display:none">💾 保存</button>
               <button class="btn sm" onclick="confirmComm()" id="comm-confirm-btn" style="display:none;background:var(--amber);color:#fff;border-color:var(--amber)">✅ 社長確認済にする</button>
               <button class="btn sm" id="corr-toggle-btn" onclick="toggleCorrInput()" style="background:var(--red);color:#fff;border-color:var(--red)">✏️ 修正入力</button>
@@ -1332,6 +1402,7 @@
                 style="width:90px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;font-weight:600;color:var(--text)"
                 onkeydown="if(event.key==='Enter')calcCommission()">
               <button class="btn sm primary" onclick="calcCommission()">集計実行</button>
+              <button class="btn sm" onclick="clearCommView()" style="background:#666;color:#fff;border-color:#666">✕ クリア</button>
               <button class="btn sm" onclick="printCommission()">🖨 一覧印刷</button>
               <button class="btn sm" onclick="printCommissionAll()" style="background:#2c5f3f;color:#fff;border-color:#2c5f3f">🖨 担当者別印刷</button>
             </div>
@@ -1841,13 +1912,16 @@
       </div>
 
       <div class="card">
-        <div class="card-title">担当者マスタ</div>
+        <div class="card-title">
+          担当者マスタ
+          <button class="btn sm primary" onclick="showAddStaff()">＋ 追加</button>
+        </div>
         <div class="tbl-wrap">
           <table class="th-purple">
             <thead><tr>
-              <th>担当者名</th><th>区分</th><th>契約区分</th><th>アポ率</th><th>クロ率</th><th>有効</th>
+              <th>担当者名</th><th>区分</th><th>契約区分</th><th>アポ率</th><th>クロ率</th><th>有効</th><th>最終更新</th><th>操作</th>
             </tr></thead>
-            <tbody id="staff-body"><tr><td colspan="6" class="loading">読み込み中...</td></tr></tbody>
+            <tbody id="staff-body"><tr><td colspan="8" class="loading">読み込み中...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1859,6 +1933,7 @@
         </div>
         <div style="font-size:12px;color:var(--text-sub);margin-bottom:12px">
           ✅=許可　☐=不許可。管理者は全て許可（変更不可）。
+          <span id="perm-last-saved" style="margin-left:12px;font-size:11px;color:var(--text-hint)"></span>
         </div>
         <div style="overflow-x:auto">
           <table id="perm-table" style="border-collapse:collapse;font-size:12px;min-width:600px">
@@ -1891,6 +1966,59 @@
       </div>
 
       <!-- 請求書発行モーダル -->
+      <!-- 担当者編集モーダル -->
+      <div id="staff-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-start;justify-content:center;padding:1rem">
+        <div style="background:#fff;border-radius:12px;padding:1.5rem;width:100%;max-width:460px;margin-top:3rem;position:relative">
+          <button onclick="closeStaffModal()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+          <div style="font-size:15px;font-weight:700;margin-bottom:1rem;color:var(--blue)" id="sm-title">担当者追加</div>
+          <input type="hidden" id="sm-id">
+          <div class="field-grid g2" style="gap:10px">
+            <div class="field" style="grid-column:1/-1">
+              <label>担当者名 *</label>
+              <input type="text" id="sm-name" placeholder="山田太郎" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+            </div>
+            <div class="field">
+              <label>担当者区分</label>
+              <select id="sm-kubun" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+                <option value="営業">営業</option>
+                <option value="工事">工事</option>
+                <option value="事務">事務</option>
+                <option value="その他">その他</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>契約区分</label>
+              <select id="sm-keiyaku" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+                <option value="社員">社員</option>
+                <option value="業務委託">業務委託</option>
+                <option value="半業務委託">半業務委託</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>担当者名（ログイン）</label>
+              <input type="text" id="sm-staff-name" placeholder="ログインIDとの対応名" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+            </div>
+            <div class="field">
+              <label>アポ率（例: 0.10）</label>
+              <input type="number" id="sm-apo" step="0.01" min="0" max="1" placeholder="0.10" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+            </div>
+            <div class="field">
+              <label>クロ率（例: 0.08）</label>
+              <input type="number" id="sm-clo" step="0.01" min="0" max="1" placeholder="0.08" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+            </div>
+            <div class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px">
+              <input type="checkbox" id="sm-valid" checked style="width:16px;height:16px">
+              <label for="sm-valid" style="font-weight:600;cursor:pointer">有効（有効にしないと選択肢に表示されません）</label>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+            <button class="btn sm" onclick="closeStaffModal()">キャンセル</button>
+            <button class="btn sm" id="sm-delete-btn" onclick="deleteStaff()" style="background:#c0392b;color:#fff;border-color:#c0392b;display:none">削除</button>
+            <button class="btn sm primary" onclick="saveStaff()">💾 保存</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 業者登録モーダル -->
       <div id="vendor-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-start;justify-content:center;padding:1rem">
         <div style="background:#fff;border-radius:12px;padding:1.5rem;width:100%;max-width:500px;margin-top:3rem;position:relative">
@@ -2348,50 +2476,155 @@ function setCompany(co) {
 }
 
 // ===== ダッシュボード =====
+// チャートインスタンスを保持
+let _charts = {};
+
 async function loadDashboard() {
-  const now = new Date();
-  // 年月コードは西暦下2桁+月2桁（例:2603）
-  const ym = String(now.getFullYear()).slice(-2) + String(now.getMonth()+1).padStart(2,'0');
+  const now  = new Date();
+  const thisY = now.getFullYear();
+  const lastY = thisY - 1;
+  const thisM = now.getMonth() + 1; // 1-12
 
-  // 今月のKPI（契約日で月初〜月末に絞り込み）
-  const ymY = 2000 + parseInt(ym.slice(0,2));
-  const ymM = parseInt(ym.slice(2,4));
-  const ymFrom = `${ymY}-${String(ymM).padStart(2,'0')}-01`;
-  const lastDay = new Date(ymY, ymM, 0).getDate();
-  const ymTo   = `${ymY}-${String(ymM).padStart(2,'0')}-${lastDay}`;
-  let dashQuery = db.from('工事案件')
-    .select('契約金額, 社内仕切税抜')
-    .gte('契約日', ymFrom).lte('契約日', ymTo);
-  if (currentCompany !== '共通') dashQuery = dashQuery.eq('会社区分', currentCompany);
-  const { data: proj } = await dashQuery;
+  // 今年・昨年の範囲
+  const thisFrom = `${thisY}-01-01`;
+  const thisTo   = `${thisY}-12-31`;
+  const lastFrom = `${lastY}-01-01`;
+  const lastTo   = `${lastY}-12-31`;
 
-  const all = proj || [];
-  const cnt = all.length;
-  const amt = all.reduce((s,p) => s + Number(p.契約金額||0), 0);
+  // ===== データ取得 =====
+  let q1 = db.from('工事案件')
+    .select('契約日,契約金額,社内仕切税抜,アポ担当名')
+    .gte('契約日', lastFrom).lte('契約日', thisTo)
+    .not('ステータス','eq','失注');
+  if (currentCompany !== '共通') q1 = q1.eq('会社区分', currentCompany);
+  const { data: allCases } = await q1;
+  const cases = allCases || [];
 
-  let marginSum = 0, marginCnt = 0;
-  all.forEach(p => {
-    const excl = p.契約金額 / 1.1;
-    const cost = p.社内仕切税抜 || 0;
-    if (excl > 0 && cost > 0) {
-      marginSum += (excl - cost) / excl * 100;
-      marginCnt++;
-    }
+  // 見込み客データ（申込・計測）
+  const { data: prospects } = await db.from('見込み客')
+    .select('契約日,アポ担当,計測者')
+    .gte('契約日', thisFrom).lte('契約日', thisTo);
+  const apps = prospects || [];
+
+  // 入金データ（未収分）
+  const { data: unpaidData } = await db.from('入金')
+    .select('請求金額,入金金額,入金日,案件id,工事案件(ステータス,完了日)')
+    .is('入金日', null).gt('請求金額', 3000);
+  const unpaid = unpaidData || [];
+
+  // ===== KPIカード =====
+  // 完了後未収（ステータス=完了 or 完工 かつ 入金日なし）
+  const kanryoUnpaid = unpaid.filter(r => {
+    const s = r.工事案件?.ステータス || '';
+    return s === '完了' || s === '完工';
+  });
+  const kanryoCnt = kanryoUnpaid.length;
+  const kanryoAmt = kanryoUnpaid.reduce((s,r) => s + Math.max(0, Number(r.請求金額||0) - Number(r.入金金額||0)), 0);
+
+  // 入金待ち（全体）
+  const unpaidCnt = unpaid.length;
+  const unpaidAmt = unpaid.reduce((s,r) => s + Math.max(0, Number(r.請求金額||0) - Number(r.入金金額||0)), 0);
+
+  document.getElementById('kpi-kanryo-cnt').textContent = kanryoCnt + '件';
+  document.getElementById('kpi-kanryo-amt').textContent = (kanryoAmt/1000000).toFixed(1) + '百万';
+  document.getElementById('kpi-unpaid-cnt').textContent = unpaidCnt + '件';
+  document.getElementById('kpi-unpaid-amt').textContent = (unpaidAmt/1000000).toFixed(1) + '百万';
+
+  // ===== 月別契約金額グラフ =====
+  const months = Array.from({length:12}, (_,i) => i+1);
+  const thisMonthly = months.map(m => {
+    const mStr = String(m).padStart(2,'0');
+    return cases.filter(c => c.契約日?.startsWith(`${thisY}-${mStr}`))
+      .reduce((s,c) => s + Number(c.契約金額||0), 0);
+  });
+  const lastMonthly = months.map(m => {
+    const mStr = String(m).padStart(2,'0');
+    return cases.filter(c => c.契約日?.startsWith(`${lastY}-${mStr}`))
+      .reduce((s,c) => s + Number(c.契約金額||0), 0);
   });
 
-  document.getElementById('kpi-cnt').textContent = cnt + '件';
-  document.getElementById('kpi-amt').textContent = '¥' + Math.round(amt/10000).toLocaleString() + '万';
-  document.getElementById('kpi-amt-sub').textContent = amt.toLocaleString() + '円';
-  document.getElementById('kpi-margin').textContent = marginCnt > 0 ? (marginSum/marginCnt).toFixed(1) + '%' : '—';
+  const monthLabels = months.map(m => m + '月');
+  const toM = (v) => Math.round(v / 10000) / 100; // 円→百万円
 
-  // 最近10件（契約日の新しい順）
+  // 今月の詳細テキスト
+  const thisMonthAmt = thisMonthly[thisM-1];
+  const totalThis = thisMonthly.reduce((s,v)=>s+v,0);
+  const totalLast = lastMonthly.reduce((s,v)=>s+v,0);
+  document.getElementById('chart-monthly-totals').innerHTML =
+    `<span>今年合計: <b>¥${Math.round(totalThis/10000).toLocaleString()}万</b></span>
+     <span>昨年合計: <b>¥${Math.round(totalLast/10000).toLocaleString()}万</b></span>
+     <span>今月(${thisM}月): <b>¥${thisMonthAmt.toLocaleString()}円</b></span>`;
+
+  // 今年の各月の背景色（今月だけ強調）
+  const thisBarColors = months.map(m =>
+    m === thisM ? '#e65100' : '#1565c0'
+  );
+
+  _buildChart('chart-monthly', 'bar', {
+    labels: monthLabels,
+    datasets: [
+      {
+        label: `今年(${thisY})`,
+        data: thisMonthly.map(toM),
+        backgroundColor: thisBarColors,
+        order: 1,
+      },
+      {
+        label: `昨年(${lastY})`,
+        data: lastMonthly.map(toM),
+        backgroundColor: 'rgba(120,144,156,0.5)',
+        borderColor: 'rgba(120,144,156,0.8)',
+        borderWidth: 1,
+        order: 2,
+      },
+    ],
+  }, {
+    onClick: (e, els) => {
+      if (!els.length) return;
+      const idx = els[0].index;
+      const m = months[idx];
+      _jumpToMonthOrders(thisY, m);
+    },
+    scales: {
+      y: { ticks: { callback: v => v + 'M' } },
+    },
+  });
+
+  // ===== 担当別契約額グラフ =====
+  const STAFF_AMT = ['守','武田','大石','引地','板垣','後藤'];
+  const staffAmt = _buildStaffData(
+    cases.filter(c => c.契約日?.startsWith(String(thisY))),
+    STAFF_AMT,
+    c => c.アポ担当名,
+    c => Number(c.契約金額||0)
+  );
+  _buildStaffChart('chart-staff-amt', staffAmt, v => (v/1000000).toFixed(1), 'M');
+
+  // ===== 担当別申込件数グラフ =====
+  const STAFF_APO = ['守','武田','大石','引地','板垣','後藤'];
+  const staffApps = _buildStaffData(
+    apps, STAFF_APO,
+    a => a.アポ担当,
+    () => 1
+  );
+  _buildStaffChart('chart-staff-apps', staffApps, v => v, '件');
+
+  // ===== 担当別計測件数グラフ =====
+  const STAFF_SOK = ['黒金','大越','藤田'];
+  const staffSok = _buildStaffData(
+    apps.filter(a => a.計測者),
+    STAFF_SOK,
+    a => a.計測者,
+    () => 1
+  );
+  _buildStaffChart('chart-staff-sokutei', staffSok, v => v, '件');
+
+  // ===== 最近10件 =====
   let recentQuery = db.from('工事案件')
     .select('*, 顧客(施主名)')
-    .order('契約日', { ascending: false })
-    .limit(10);
+    .order('契約日', { ascending: false }).limit(10);
   if (currentCompany !== '共通') recentQuery = recentQuery.eq('会社区分', currentCompany);
   const { data: recent } = await recentQuery;
-
   const tbody = document.getElementById('recent-body');
   if (!recent || recent.length === 0) {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-hint);padding:1rem">データがありません</td></tr>';
@@ -2401,7 +2634,7 @@ async function loadDashboard() {
     const excl = p.契約金額 / 1.1;
     const rate = p.社内仕切税抜 > 0 ? ((excl - p.社内仕切税抜) / excl * 100).toFixed(1) + '%' : '—';
     const sc = statusColor(p.ステータス);
-    return `<tr onclick="openOrder(${p.id})">
+    return `<tr onclick="openOrder(${p.id})" style="cursor:pointer">
       <td style="font-family:monospace;font-size:11px">${p.工事番号||'—'}</td>
       <td style="font-weight:600">${p.顧客?.施主名||'—'}</td>
       <td>${p.工事名||'—'}</td>
@@ -2411,12 +2644,120 @@ async function loadDashboard() {
       <td style="color:var(--text-hint);font-size:11px;white-space:nowrap">${p.契約日||'—'}</td>
     </tr>`;
   }).join('');
-
-  // 入金待ち件数
-  const { count } = await db.from('入金').select('*', { count: 'exact', head: true })
-    .is('入金日', null).gt('請求金額', 0);
-  document.getElementById('kpi-unpaid').textContent = (count||0) + '件';
 }
+
+// 担当者別データ集計ヘルパー
+function _buildStaffData(rows, staffList, getStaff, getValue) {
+  const map = {};
+  staffList.forEach(s => { map[s] = 0; });
+  map['他'] = 0;
+  rows.forEach(r => {
+    const s = getStaff(r) || '他';
+    const v = getValue(r);
+    if (staffList.includes(s)) map[s] += v;
+    else map['他'] += v;
+  });
+  // 合計の大きい順にソート（「他」は末尾）
+  const sorted = staffList
+    .map(s => ({name: s, val: map[s]}))
+    .sort((a,b) => b.val - a.val);
+  sorted.push({name:'他', val: map['他']});
+  return sorted;
+}
+
+// 担当者別棒グラフ構築
+function _buildStaffChart(canvasId, staffData, formatter, unit) {
+  const COLORS = ['#1565c0','#2e7d32','#e65100','#6a1b9a','#00838f','#c62828','#37474f'];
+  const labels = staffData.map(d => d.name);
+  const values = staffData.map(d => formatter(d.val));
+  _buildChart(canvasId, 'bar', {
+    labels,
+    datasets: [{
+      data: values,
+      backgroundColor: labels.map((_,i) => COLORS[i % COLORS.length]),
+    }],
+  }, {
+    plugins: {
+      legend: {display: false},
+      tooltip: {callbacks: {label: ctx => ctx.raw + unit}},
+    },
+    scales: {
+      y: {ticks: {callback: v => v + unit}},
+    },
+  });
+}
+
+// Chart.js共通ビルダー（既存チャートを破棄して再生成）
+function _buildChart(canvasId, type, data, extraOptions) {
+  if (_charts[canvasId]) {
+    _charts[canvasId].destroy();
+    delete _charts[canvasId];
+  }
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  const defaultOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top',
+        labels: {font: {size: 11}, boxWidth: 12},
+      },
+    },
+    scales: {
+      x: {ticks: {font: {size: 11}}},
+      y: {ticks: {font: {size: 10}}},
+    },
+  };
+  const merged = _deepMerge(defaultOpts, extraOptions || {});
+  _charts[canvasId] = new Chart(ctx, {type, data, options: merged});
+}
+
+// 今月の受注一覧へジャンプ
+function _jumpToMonthOrders(year, month) {
+  const mStr = String(month).padStart(2,'0');
+  const from  = `${year}/${mStr}/01`;
+  const lastD = new Date(year, month, 0).getDate();
+  const to    = `${year}/${mStr}/${String(lastD).padStart(2,'0')}`;
+  showPage('order-list');
+  setTimeout(() => {
+    const el1 = document.getElementById('lf-date-from');
+    const el2 = document.getElementById('lf-date-to');
+    if (el1) el1.value = from;
+    if (el2) el2.value = to;
+    loadOrderList();
+    // 絞込パネルを開く
+    const panel = document.getElementById('order-filter-panel');
+    if (panel && panel.style.display === 'none') toggleOrderFilter();
+  }, 300);
+}
+
+// 未収一覧へジャンプ
+function goToUnpaidList(type) {
+  showPage('order-list');
+  setTimeout(() => {
+    const statusEl = document.getElementById('list-status');
+    if (type === 'kanryo' && statusEl) {
+      statusEl.value = '完了';
+    }
+    loadOrderList();
+  }, 300);
+}
+
+// 簡易ディープマージ
+function _deepMerge(target, source) {
+  const out = Object.assign({}, target);
+  for (const key of Object.keys(source)) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      out[key] = _deepMerge(target[key] || {}, source[key]);
+    } else {
+      out[key] = source[key];
+    }
+  }
+  return out;
+}
+
 
 // 備考ホバー表示
 function memoCell(text, style) {
@@ -4393,6 +4734,108 @@ function calcActualPayment() {
   document.getElementById('pm-billed').dataset.prev = billed;
 }
 
+// ===== 担当者マスタ =====
+
+function showAddStaff() {
+  document.getElementById('sm-title').textContent = '担当者追加';
+  document.getElementById('sm-id').value = '';
+  document.getElementById('sm-name').value = '';
+  document.getElementById('sm-kubun').value = '営業';
+  document.getElementById('sm-keiyaku').value = '社員';
+  document.getElementById('sm-staff-name').value = '';
+  document.getElementById('sm-apo').value = '0.10';
+  document.getElementById('sm-clo').value = '0.08';
+  document.getElementById('sm-valid').checked = true;
+  document.getElementById('sm-delete-btn').style.display = 'none';
+  document.getElementById('staff-modal').style.display = 'flex';
+}
+
+function editStaff(id, name, kubun, keiyaku, staffName, apo, clo, valid) {
+  document.getElementById('sm-title').textContent = '担当者編集';
+  document.getElementById('sm-id').value = id;
+  document.getElementById('sm-name').value = name;
+  document.getElementById('sm-kubun').value = kubun || '営業';
+  document.getElementById('sm-keiyaku').value = keiyaku || '社員';
+  document.getElementById('sm-staff-name').value = staffName || '';
+  document.getElementById('sm-apo').value = apo || 0;
+  document.getElementById('sm-clo').value = clo || 0;
+  document.getElementById('sm-valid').checked = valid;
+  document.getElementById('sm-delete-btn').style.display = '';
+  document.getElementById('staff-modal').style.display = 'flex';
+}
+
+function closeStaffModal() {
+  document.getElementById('staff-modal').style.display = 'none';
+}
+
+async function saveStaff() {
+  if (!editorCan('マスタ管理_担当者管理')) { showToast('担当者管理の権限がありません', true); return; }
+  const id       = document.getElementById('sm-id').value;
+  const name     = document.getElementById('sm-name').value.trim();
+  const kubun    = document.getElementById('sm-kubun').value;
+  const keiyaku  = document.getElementById('sm-keiyaku').value;
+  const staffName= document.getElementById('sm-staff-name').value.trim();
+  const apo      = parseFloat(document.getElementById('sm-apo').value) || 0;
+  const clo      = parseFloat(document.getElementById('sm-clo').value) || 0;
+  const valid    = document.getElementById('sm-valid').checked;
+  if (!name) { showToast('担当者名を入力してください', true); return; }
+
+  const payload = {
+    担当者名: name,
+    担当者区分: kubun,
+    契約区分: keiyaku,
+    担当者名_ログイン: staffName || name,
+    アポ率: apo,
+    クロ率: clo,
+    有効フラグ: valid,
+    最終更新日: new Date().toISOString().split('T')[0],
+  };
+
+  let error;
+  if (id) {
+    ({ error } = await db.from('担当者').update(payload).eq('id', id));
+  } else {
+    ({ error } = await db.from('担当者').insert(payload));
+  }
+  if (error) { showToast('保存に失敗しました: ' + error.message, true); return; }
+  showToast(id ? '担当者情報を更新しました' : '担当者を追加しました');
+  closeStaffModal();
+  loadMaster();
+}
+
+async function deleteStaff() {
+  const id   = document.getElementById('sm-id').value;
+  const name = document.getElementById('sm-name').value;
+  if (!id) return;
+  if (!confirm(`「${name}」を削除しますか？\n※過去のデータに影響する場合は「有効フラグをオフ」にすることをお勧めします。`)) return;
+  const { error } = await db.from('担当者').delete().eq('id', id);
+  if (error) { showToast('削除に失敗しました: ' + error.message, true); return; }
+  showToast('担当者を削除しました');
+  closeStaffModal();
+  loadMaster();
+}
+
+// ===== コミッションクリア =====
+function clearCommEdit() {
+  document.getElementById('comm-edit-month').value = '';
+  document.getElementById('comm-edit-period').textContent = '';
+  document.getElementById('comm-edit-wrap').innerHTML = '<div class="loading">締め年月を入力して「読み込み」を押してください</div>';
+  document.getElementById('comm-save-btn').style.display = 'none';
+  document.getElementById('comm-confirm-btn').style.display = 'none';
+  const corrArea = document.getElementById('corr-input-area');
+  if (corrArea) corrArea.style.display = 'none';
+}
+
+function clearCommView() {
+  document.getElementById('comm-month').value = '';
+  document.getElementById('comm-period-label').textContent = '';
+  document.getElementById('comm-body').innerHTML =
+    '<tr><td colspan="7" class="loading">締め年月を入力して「集計実行」を押してください</td></tr>';
+  document.getElementById('comm-grand-total').textContent = '—';
+  document.getElementById('comm-detail-card').style.display = 'none';
+  commCurrentData = [];
+}
+
 // ===== 業者マスタ =====
 // loadMaster は下部（権限設定統合版）に定義
 
@@ -5308,6 +5751,15 @@ async function savePermSettings() {
     showToast('一部の保存に失敗しました: ' + errors.join(', '), true);
   } else {
     showToast('権限設定を保存しました');
+    // 最終設定日を表示
+    const now = new Date();
+    const nowStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const el = document.getElementById('perm-last-saved');
+    if (el) el.textContent = `最終設定日時: ${nowStr}　設定者: ${currentUser?.name||''}`;
+    // 保存済みチェックボックスを緑ハイライト
+    document.querySelectorAll('#perm-tbody input[type=checkbox]').forEach(cb => {
+      cb.style.accentColor = cb.checked ? '#2e7d32' : '';
+    });
   }
 }
 
@@ -5860,7 +6312,7 @@ async function loadMaster() {
       tbody.innerHTML = `<tr><td colspan="6" style="color:red;padding:12px">エラー: ${error.message}</td></tr>`;
     } else {
       tbody.innerHTML = (data||[]).length === 0
-        ? '<tr><td colspan="6" style="padding:12px;color:#888">データなし</td></tr>'
+        ? '<tr><td colspan="8" style="padding:12px;color:#888">データなし</td></tr>'
         : (data||[]).map(s => `
           <tr>
             <td style="font-weight:600">${s.担当者名}</td>
@@ -5869,6 +6321,8 @@ async function loadMaster() {
             <td style="text-align:right">${((s.アポ率||0)*100).toFixed(0)}%</td>
             <td style="text-align:right">${((s.クロ率||0)*100).toFixed(0)}%</td>
             <td>${s.有効フラグ?'✓':'—'}</td>
+            <td style="font-size:11px;color:var(--text-hint)">${s.最終更新日||'—'}</td>
+            <td><button class="btn sm" onclick="editStaff(${s.id},'${(s.担当者名||'').replace(/'/g,"\\'")}','${s.担当者区分||''}','${s.契約区分||''}','${(s.担当者名_ログイン||s.担当者名||'').replace(/'/g,"\\'")}',${s.アポ率||0},${s.クロ率||0},${s.有効フラグ?'true':'false'})">編集</button></td>
           </tr>`).join('');
     }
   } catch(e) {
@@ -7784,8 +8238,14 @@ async function updateProspectField(id, field, value) {
   if (field !== '計測者' && !editorCan('営業支援_編集')) {
     showToast('編集の権限がありません', true); return;
   }
-  await db.from('見込み客').update({ [field]: value || null }).eq('id', id);
-  showToast(`${field}を更新しました`);
+  const { error } = await db.from('見込み客').update({ [field]: value || null }).eq('id', id);
+  if (error) {
+    showToast(`保存に失敗しました: ${error.message}`, true);
+  } else {
+    showToast(field === '計測者'
+      ? `✅ 計測者を「${value||'未定'}」に保存しました`
+      : `${field}を更新しました`);
+  }
 }
 
 // 営業支援ページ初期化
