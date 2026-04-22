@@ -1802,6 +1802,44 @@
 
     <!-- マスタ管理 -->
     <div class="page" id="page-master">
+      <!-- 書類発行履歴 -->
+      <div class="card" id="doc-history-master-card">
+        <div class="card-title">
+          書類発行履歴
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="text" id="dh-search" placeholder="施主名・工事番号で絞込"
+              style="padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;width:160px"
+              oninput="loadDocHistoryMaster()">
+            <button class="btn sm" onclick="loadDocHistoryMaster()">🔄 更新</button>
+            <button class="btn sm" onclick="truncateDocHistory()"
+              style="background:#c0392b;color:#fff;border-color:#c0392b" id="dh-truncate-btn">
+              🗑 全件削除（初期化）
+            </button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:8px">
+          ※ 管理者のみ：誤記録の削除・備考の編集ができます
+        </div>
+        <div class="tbl-wrap">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:#1a3a5c;color:#fff">
+              <th style="padding:7px 8px">発行日</th>
+              <th style="padding:7px 8px">書類種別</th>
+              <th style="padding:7px 8px">工事番号</th>
+              <th style="padding:7px 8px">施主名</th>
+              <th style="padding:7px 8px">請求回</th>
+              <th style="padding:7px 8px;text-align:right">金額</th>
+              <th style="padding:7px 8px">発行者</th>
+              <th style="padding:7px 8px">備考</th>
+              <th style="padding:7px 8px">操作</th>
+            </tr></thead>
+            <tbody id="doc-history-master-body">
+              <tr><td colspan="9" class="loading">読み込み中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-title">担当者マスタ</div>
         <div class="tbl-wrap">
@@ -1848,44 +1886,6 @@
               <th>業者名</th><th>銀行名</th><th>支店名</th><th>口座種別</th><th>口座番号</th><th>口座名義</th><th>操作</th>
             </tr></thead>
             <tbody id="vendor-body"><tr><td colspan="7" class="loading">読み込み中...</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- 書類発行履歴 -->
-      <div class="card" id="doc-history-master-card">
-        <div class="card-title">
-          書類発行履歴
-          <div style="display:flex;gap:6px;align-items:center">
-            <input type="text" id="dh-search" placeholder="施主名・工事番号で絞込"
-              style="padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;width:160px"
-              oninput="loadDocHistoryMaster()">
-            <button class="btn sm" onclick="loadDocHistoryMaster()">🔄 更新</button>
-            <button class="btn sm" onclick="truncateDocHistory()"
-              style="background:#c0392b;color:#fff;border-color:#c0392b" id="dh-truncate-btn">
-              🗑 全件削除（初期化）
-            </button>
-          </div>
-        </div>
-        <div style="font-size:11px;color:var(--text-hint);margin-bottom:8px">
-          ※ 管理者のみ：誤記録の削除・備考の編集ができます
-        </div>
-        <div class="tbl-wrap">
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="background:#1a3a5c;color:#fff">
-              <th style="padding:7px 8px">発行日</th>
-              <th style="padding:7px 8px">書類種別</th>
-              <th style="padding:7px 8px">工事番号</th>
-              <th style="padding:7px 8px">施主名</th>
-              <th style="padding:7px 8px">請求回</th>
-              <th style="padding:7px 8px;text-align:right">金額</th>
-              <th style="padding:7px 8px">発行者</th>
-              <th style="padding:7px 8px">備考</th>
-              <th style="padding:7px 8px">操作</th>
-            </tr></thead>
-            <tbody id="doc-history-master-body">
-              <tr><td colspan="9" class="loading">読み込み中...</td></tr>
-            </tbody>
           </table>
         </div>
       </div>
