@@ -2373,7 +2373,7 @@ function showToastLogin(msg) {
 })();
 
 // ===== ナビゲーション =====
-function showPage(id, callerBtn) {
+function showPage(id, callerBtn, skipClear) {
   // 権限チェック（ページ表示権限）
   const pagePermMap = {
     'dashboard':  null, // 全員
@@ -2398,7 +2398,10 @@ function showPage(id, callerBtn) {
   if (id === 'dashboard') loadDashboard();
   if (id === 'sales') initSalesPage();
   if (id === 'order-new') clearOrderForm();
-  if (id === 'order-list') { clearOrderFilter(); loadOrderList(); }
+  if (id === 'order-list') {
+    if (!skipClear) clearOrderFilter();
+    loadOrderList();
+  }
   if (id === 'purchase') { loadPurchase(); loadHikiochList(); }
   if (id === 'master') loadMaster();
 }
@@ -2500,10 +2503,11 @@ async function loadDashboard() {
   const { data: allCases } = await q1;
   const cases = allCases || [];
 
-  // 見込み客データ（申込・計測）※すべての進捗を対象
+  // 見込み客データ（申込件数）：申込日が今年・キャンセル以外・全進捗
   const { data: allProspects } = await db.from('見込み客')
-    .select('申込日,アポ担当,計測者,計測日')
+    .select('申込日,アポ担当')
     .gte('申込日', thisFrom).lte('申込日', thisTo)
+    .not('申込日','is',null)
     .not('進捗ステータス','eq','キャンセル');
   const apps = allProspects || [];
 
@@ -2514,7 +2518,7 @@ async function loadDashboard() {
     .not('計測日','is',null);
   const sokuteis = sokuteiData || [];
 
-  // 入金データ（未収分）
+  // 入金データ（未収分：入金日なし・請求金額3000円超）
   const { data: unpaidData } = await db.from('入金')
     .select('請求金額,入金金額,入金日,案件id,工事案件(ステータス,完了日)')
     .is('入金日', null).gt('請求金額', 3000);
@@ -2526,12 +2530,23 @@ async function loadDashboard() {
     const s = r.工事案件?.ステータス || '';
     return s === '完了' || s === '完工';
   });
-  const kanryoCnt = kanryoUnpaid.length;
-  const kanryoAmt = kanryoUnpaid.reduce((s,r) => s + Math.max(0, Number(r.請求金額||0) - Number(r.入金金額||0)), 0);
+  // 件数は案件数（案件idの重複排除）
+  const kanryoCaseIds = new Set(kanryoUnpaid.map(r => r.案件id));
+  const kanryoCnt = kanryoCaseIds.size;
+  const kanryoAmt = kanryoUnpaid.reduce((s,r) => {
+    const billing = Number(r.請求金額||0);
+    const paid    = Number(r.入金金額||0);
+    return s + Math.max(0, billing - paid);
+  }, 0);
 
-  // 入金待ち（全体）
-  const unpaidCnt = unpaid.length;
-  const unpaidAmt = unpaid.reduce((s,r) => s + Math.max(0, Number(r.請求金額||0) - Number(r.入金金額||0)), 0);
+  // 入金待ち（全体・案件数）
+  const unpaidCaseIds = new Set(unpaid.map(r => r.案件id));
+  const unpaidCnt = unpaidCaseIds.size;
+  const unpaidAmt = unpaid.reduce((s,r) => {
+    const billing = Number(r.請求金額||0);
+    const paid    = Number(r.入金金額||0);
+    return s + Math.max(0, billing - paid);
+  }, 0);
 
   document.getElementById('kpi-kanryo-cnt').textContent = kanryoCnt + '件';
   document.getElementById('kpi-kanryo-amt').textContent = (kanryoAmt/1000000).toFixed(1) + '百万';
@@ -2606,7 +2621,7 @@ async function loadDashboard() {
     c => c.アポ担当名,
     c => Number(c.契約金額||0)
   );
-  _buildStaffChart('chart-staff-amt', staffAmt, v => (v/1000000).toFixed(1), 'M');
+  _buildStaffChart('chart-staff-amt', staffAmt, v => parseFloat((v/1000000).toFixed(1)), 'M');
 
   // ===== 担当別申込件数グラフ =====
   const STAFF_APO = ['守','武田','大石','引地','板垣','後藤'];
@@ -2615,7 +2630,7 @@ async function loadDashboard() {
     a => a.アポ担当,
     () => 1
   );
-  _buildStaffChart('chart-staff-apps', staffApps, v => v, '件');
+  _buildStaffChart('chart-staff-apps', staffApps, v => Number(v), '件');
 
   // ===== 担当別計測件数グラフ =====
   const STAFF_SOK = ['黒金','大越','藤田'];
@@ -2625,7 +2640,7 @@ async function loadDashboard() {
     a => a.計測者,
     () => 1
   );
-  _buildStaffChart('chart-staff-sokutei', staffSok, v => v, '件');
+  _buildStaffChart('chart-staff-sokutei', staffSok, v => Number(v), '件');
 
   // ===== 最近10件 =====
   let recentQuery = db.from('工事案件')
@@ -2674,15 +2689,17 @@ function _buildStaffData(rows, staffList, getStaff, getValue) {
 }
 
 // 担当者別棒グラフ構築
-function _buildStaffChart(canvasId, staffData, formatter, unit) {
+function _buildStaffChart(canvasId, staffData, toDisplay, unit) {
   const COLORS = ['#1565c0','#2e7d32','#e65100','#6a1b9a','#00838f','#c62828','#37474f'];
   const labels = staffData.map(d => d.name);
-  const values = staffData.map(d => formatter(d.val));
+  // data は数値のまま渡す（Chartが正しく描画できるよう）
+  const values = staffData.map(d => Number(toDisplay(d.val)));
   _buildChart(canvasId, 'bar', {
     labels,
     datasets: [{
       data: values,
       backgroundColor: labels.map((_,i) => COLORS[i % COLORS.length]),
+      borderRadius: 3,
     }],
   }, {
     plugins: {
@@ -2690,7 +2707,10 @@ function _buildStaffChart(canvasId, staffData, formatter, unit) {
       tooltip: {callbacks: {label: ctx => ctx.raw + unit}},
     },
     scales: {
-      y: {ticks: {callback: v => v + unit}},
+      y: {
+        beginAtZero: true,
+        ticks: {callback: v => v + unit},
+      },
     },
   });
 }
@@ -2728,53 +2748,36 @@ function _jumpToMonthOrders(year, month) {
   const lastD = new Date(year, month, 0).getDate();
   const from  = `${year}/${mStr}/01`;
   const to    = `${year}/${mStr}/${String(lastD).padStart(2,'0')}`;
-
-  // まず受注一覧へ移動（clearOrderFilterをスキップして直接セット）
-  showPage('order-list');
+  const el1 = document.getElementById('list-date-from');
+  const el2 = document.getElementById('list-date-to');
+  const stEl = document.getElementById('list-status');
+  if (el1) el1.value = from;
+  if (el2) el2.value = to;
+  if (stEl) stEl.value = '';
+  showPage('order-list', null, true);
   setTimeout(() => {
-    // フィルターパネルを開く
     const panel = document.getElementById('order-filter-panel');
     if (panel && panel.style.display === 'none') toggleOrderFilter();
-    // 日付フィルターをセット
-    const el1 = document.getElementById('list-date-from');
-    const el2 = document.getElementById('list-date-to');
-    if (el1) el1.value = from;
-    if (el2) el2.value = to;
-    // ステータス・他フィルターはリセット
-    const stEl = document.getElementById('list-status');
-    if (stEl) stEl.value = '';
-    loadOrderList();
-  }, 200);
+    switchOrderListTab('order');
+  }, 50);
 }
 
-// 未収一覧へジャンプ（入金一覧タブで絞り込み）
+// 未収一覧へジャンプ
 function goToUnpaidList(type) {
-  showPage('order-list');
+  const el1 = document.getElementById('list-date-from');
+  const el2 = document.getElementById('list-date-to');
+  const stEl = document.getElementById('list-status');
+  if (el1) el1.value = '';
+  if (el2) el2.value = '';
+  if (stEl) stEl.value = (type === 'kanryo') ? '完工' : '';
+  showPage('order-list', null, true);
   setTimeout(() => {
     const panel = document.getElementById('order-filter-panel');
     if (panel && panel.style.display === 'none') toggleOrderFilter();
-    // 日付リセット
-    const el1 = document.getElementById('list-date-from');
-    const el2 = document.getElementById('list-date-to');
-    if (el1) el1.value = '';
-    if (el2) el2.value = '';
-    // 完了後未収はステータス「完工」or「完了」
-    const stEl = document.getElementById('list-status');
-    if (type === 'kanryo' && stEl) {
-      stEl.value = '完工';
-    } else if (stEl) {
-      stEl.value = '';
-    }
-    loadOrderList();
-    // 入金状況タブへ切替（tab=payment）
-    setTimeout(() => {
-      // 入金一覧タブへ誘導
-      const payTabBtn = document.getElementById('ol-tab-payment-btn') ||
-                        document.querySelector('[onclick*="switchOrderListTab(\'payment\')"]');
-      if (payTabBtn) payTabBtn.click();
-    }, 500);
-  }, 200);
+    switchOrderListTab('payment');
+  }, 50);
 }
+
 
 // 簡易ディープマージ
 function _deepMerge(target, source) {
