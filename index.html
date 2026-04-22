@@ -6391,17 +6391,30 @@ async function loadMaster() {
 // ===== ダッシュボードKPI（入金一覧と同じ計算） =====
 async function loadUnpaidKpi() {
   try {
-    // 入金一覧「未収」と同じ：pl-statusを一時的に切り替えて計算する代わりに
-    // loadPaymentListと同じSQLロジックで計算する
-
-    // ステップ1：全工事案件（失注以外・契約金額あり）を取得
+    // ステップ1：全工事案件を取得
     let q = db.from('工事案件')
       .select('id,ステータス,契約金額');
     if (currentCompany !== '共通') q = q.eq('会社区分', currentCompany);
-    const { data: allC } = await q.limit(5000);
+    const { data: allC, error: allCErr } = await q.limit(5000);
+
+    // デバッグ：コンソールに出力
+    console.log('[KPI] currentCompany:', currentCompany);
+    console.log('[KPI] allC件数:', allC?.length, '/ error:', allCErr?.message);
+    if (allC && allC.length > 0) {
+      console.log('[KPI] 先頭レコード例:', JSON.stringify(allC[0]));
+    }
+
+    if (allCErr) {
+      document.getElementById('kpi-unpaid-cnt').textContent = 'ERR';
+      console.error('[KPI] queryエラー:', allCErr);
+      return;
+    }
+
     const validCases = (allC || []).filter(c =>
       c.ステータス !== '失注' && Number(c.契約金額 || 0) > 0
     );
+    console.log('[KPI] validCases件数:', validCases.length);
+
     if (validCases.length === 0) {
       document.getElementById('kpi-kanryo-cnt').textContent = '0件';
       document.getElementById('kpi-kanryo-amt').textContent = '0.0百万';
@@ -6410,7 +6423,7 @@ async function loadUnpaidKpi() {
       return;
     }
 
-    // ステップ2：入金の支払済合計を案件単位で集計
+    // ステップ2：入金の支払済合計を集計
     const ids = validCases.map(c => c.id);
     const paidMap = {};
     for (let i = 0; i < ids.length; i += 200) {
@@ -6421,8 +6434,9 @@ async function loadUnpaidKpi() {
         paidMap[p.案件id] = (paidMap[p.案件id] || 0) + Number(p.入金金額 || 0);
       });
     }
+    console.log('[KPI] paidMapのキー数:', Object.keys(paidMap).length);
 
-    // ステップ3：未収判定（入金一覧と同じ基準：契約金額－支払済 >= 3000）
+    // ステップ3：未収判定
     let unpaidCnt = 0, unpaidAmt = 0, kanryoCnt = 0, kanryoAmt = 0;
     validCases.forEach(c => {
       const contract = Number(c.契約金額 || 0);
@@ -6436,6 +6450,7 @@ async function loadUnpaidKpi() {
         kanryoAmt += remain;
       }
     });
+    console.log('[KPI] 結果 unpaid:', unpaidCnt, '件, kanryo:', kanryoCnt, '件');
 
     document.getElementById('kpi-kanryo-cnt').textContent = kanryoCnt + '件';
     document.getElementById('kpi-kanryo-amt').textContent = (kanryoAmt / 1000000).toFixed(1) + '百万';
@@ -6443,7 +6458,7 @@ async function loadUnpaidKpi() {
     document.getElementById('kpi-unpaid-amt').textContent = (unpaidAmt / 1000000).toFixed(1) + '百万';
 
   } catch(e) {
-    console.error('KPI計算エラー:', e);
+    console.error('[KPI] 例外:', e);
     document.getElementById('kpi-kanryo-cnt').textContent = '—';
     document.getElementById('kpi-unpaid-cnt').textContent = '—';
   }
