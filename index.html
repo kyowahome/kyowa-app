@@ -2500,11 +2500,19 @@ async function loadDashboard() {
   const { data: allCases } = await q1;
   const cases = allCases || [];
 
-  // 見込み客データ（申込・計測）
-  const { data: prospects } = await db.from('見込み客')
-    .select('契約日,アポ担当,計測者')
-    .gte('契約日', thisFrom).lte('契約日', thisTo);
-  const apps = prospects || [];
+  // 見込み客データ（申込・計測）※すべての進捗を対象
+  const { data: allProspects } = await db.from('見込み客')
+    .select('申込日,アポ担当,計測者,計測日')
+    .gte('申込日', thisFrom).lte('申込日', thisTo)
+    .not('進捗ステータス','eq','キャンセル');
+  const apps = allProspects || [];
+
+  // 計測件数用（計測日ベース・今年）
+  const { data: sokuteiData } = await db.from('見込み客')
+    .select('計測日,計測者')
+    .gte('計測日', thisFrom).lte('計測日', thisTo)
+    .not('計測日','is',null);
+  const sokuteis = sokuteiData || [];
 
   // 入金データ（未収分）
   const { data: unpaidData } = await db.from('入金')
@@ -2612,7 +2620,7 @@ async function loadDashboard() {
   // ===== 担当別計測件数グラフ =====
   const STAFF_SOK = ['黒金','大越','藤田'];
   const staffSok = _buildStaffData(
-    apps.filter(a => a.計測者),
+    sokuteis,
     STAFF_SOK,
     a => a.計測者,
     () => 1
@@ -2716,33 +2724,56 @@ function _buildChart(canvasId, type, data, extraOptions) {
 
 // 今月の受注一覧へジャンプ
 function _jumpToMonthOrders(year, month) {
-  const mStr = String(month).padStart(2,'0');
-  const from  = `${year}/${mStr}/01`;
+  const mStr  = String(month).padStart(2,'0');
   const lastD = new Date(year, month, 0).getDate();
+  const from  = `${year}/${mStr}/01`;
   const to    = `${year}/${mStr}/${String(lastD).padStart(2,'0')}`;
+
+  // まず受注一覧へ移動（clearOrderFilterをスキップして直接セット）
   showPage('order-list');
   setTimeout(() => {
-    const el1 = document.getElementById('lf-date-from');
-    const el2 = document.getElementById('lf-date-to');
-    if (el1) el1.value = from;
-    if (el2) el2.value = to;
-    loadOrderList();
-    // 絞込パネルを開く
+    // フィルターパネルを開く
     const panel = document.getElementById('order-filter-panel');
     if (panel && panel.style.display === 'none') toggleOrderFilter();
-  }, 300);
+    // 日付フィルターをセット
+    const el1 = document.getElementById('list-date-from');
+    const el2 = document.getElementById('list-date-to');
+    if (el1) el1.value = from;
+    if (el2) el2.value = to;
+    // ステータス・他フィルターはリセット
+    const stEl = document.getElementById('list-status');
+    if (stEl) stEl.value = '';
+    loadOrderList();
+  }, 200);
 }
 
-// 未収一覧へジャンプ
+// 未収一覧へジャンプ（入金一覧タブで絞り込み）
 function goToUnpaidList(type) {
   showPage('order-list');
   setTimeout(() => {
-    const statusEl = document.getElementById('list-status');
-    if (type === 'kanryo' && statusEl) {
-      statusEl.value = '完了';
+    const panel = document.getElementById('order-filter-panel');
+    if (panel && panel.style.display === 'none') toggleOrderFilter();
+    // 日付リセット
+    const el1 = document.getElementById('list-date-from');
+    const el2 = document.getElementById('list-date-to');
+    if (el1) el1.value = '';
+    if (el2) el2.value = '';
+    // 完了後未収はステータス「完工」or「完了」
+    const stEl = document.getElementById('list-status');
+    if (type === 'kanryo' && stEl) {
+      stEl.value = '完工';
+    } else if (stEl) {
+      stEl.value = '';
     }
     loadOrderList();
-  }, 300);
+    // 入金状況タブへ切替（tab=payment）
+    setTimeout(() => {
+      // 入金一覧タブへ誘導
+      const payTabBtn = document.getElementById('ol-tab-payment-btn') ||
+                        document.querySelector('[onclick*="switchOrderListTab(\'payment\')"]');
+      if (payTabBtn) payTabBtn.click();
+    }, 500);
+  }, 200);
 }
 
 // 簡易ディープマージ
