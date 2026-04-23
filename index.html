@@ -7310,18 +7310,23 @@ function printEnvelope() {
       white-space:nowrap;
     ">${custName}　様</div>`;
 
-  // グリッド（10mm間隔）
-  let gridHtml = '';
+  // グリッド（SVGで描画 → 背景グラフィック設定不要で必ず印刷される）
+  // 10mm間隔、50mm毎に赤太線
+  // 120mm×235mmをSVGで描画（1mm=1単位）
+  let svgLines = '';
   for (let y = 0; y <= 235; y += 10) {
     const maj = y % 50 === 0;
-    gridHtml += `<div style="position:absolute;left:0;right:0;top:${y}mm;height:${maj?'0.7':'0.4'}px;background:${maj?'rgba(200,0,0,0.7)':'rgba(0,0,0,0.3)'}"></div>`;
-    gridHtml += `<div style="position:absolute;left:1mm;top:${y+0.5}mm;font-size:7.5pt;color:#444;font-family:monospace;font-weight:bold">${y}</div>`;
+    svgLines += `<line x1="0" y1="${y}" x2="120" y2="${y}" stroke="${maj?'#cc0000':'#888'}" stroke-width="${maj?'0.5':'0.25'}"/>`;
+    svgLines += `<text x="1" y="${y+2.5}" font-size="3" fill="#444" font-family="monospace" font-weight="bold">${y}</text>`;
   }
   for (let x = 0; x <= 120; x += 10) {
     const maj = x % 50 === 0;
-    gridHtml += `<div style="position:absolute;top:0;bottom:0;left:${x}mm;width:${maj?'0.7':'0.4'}px;background:${maj?'rgba(200,0,0,0.7)':'rgba(0,0,0,0.3)'}"></div>`;
-    if (x > 0) gridHtml += `<div style="position:absolute;top:0.5mm;left:${x+0.3}mm;font-size:7.5pt;color:#444;font-family:monospace;font-weight:bold">${x}</div>`;
+    svgLines += `<line x1="${x}" y1="0" x2="${x}" y2="235" stroke="${maj?'#cc0000':'#888'}" stroke-width="${maj?'0.5':'0.25'}"/>`;
+    if (x > 0) svgLines += `<text x="${x+0.5}" y="4" font-size="3" fill="#444" font-family="monospace" font-weight="bold">${x}</text>`;
   }
+  const gridHtml = `<svg id="grid" viewBox="0 0 120 235" width="120mm" height="235mm"
+    style="position:absolute;top:0;left:0;pointer-events:none"
+    xmlns="http://www.w3.org/2000/svg">${svgLines}</svg>`;
 
   const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>長3封筒</title>
 <style>
@@ -7343,7 +7348,7 @@ function printEnvelope() {
   }
 </style></head><body>
 
-<div id="grid">${gridHtml}</div>
+${gridHtml}
 ${toZipHtml}
 ${addrHtml}
 ${nameHtml}
