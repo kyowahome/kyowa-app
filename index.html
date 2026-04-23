@@ -408,12 +408,12 @@
             <input type="text" id="f-cost" placeholder="900,000" onfocus="amountFocus(this)" onblur="amountBlur(this);calcProfit()" onchange="calcProfit()">
           </div>
           <div class="field">
-            <label>保険申請額</label>
-            <input type="text" id="f-ins" placeholder="0" onfocus="amountFocus(this)" onblur="amountBlur(this)">
-          </div>
-          <div class="field">
             <label>保険種</label>
             <input type="text" id="f-ins-kind" placeholder="火災・雪害など">
+          </div>
+          <div class="field">
+            <label>保険申請額</label>
+            <input type="text" id="f-ins" placeholder="0" onfocus="amountFocus(this)" onblur="amountBlur(this)">
           </div>
           <div class="field">
             <label>保険支給額</label>
@@ -8348,6 +8348,7 @@ async function openOrderFromProspect(prospectId) {
   document.getElementById('f-mobile').value = p.携帯電話 || '';
   document.getElementById('f-title').value  = p.工事名   || '';
   document.getElementById('f-ins').value    = p.保険申請額 || '';
+  document.getElementById('f-memo').value   = p.備考     || '';
 
   // 契約日（見込み客に登録済みなら引き継ぐ、なければ今日）
   let contractDate = new Date().toISOString().split('T')[0];
