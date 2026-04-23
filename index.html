@@ -3832,14 +3832,20 @@ function openFolderUrl() {
 // フォルダパスをクリップボードにコピー
 function copyFolderPath(url) {
   if (!url) { showToast('フォルダURLが登録されていません', true); return; }
-  // file:///\\192.168.3.10\\path → \\192.168.3.10\path（エクスプローラー形式）
-  let path = url.replace(/^file:\/\/\//, '');  // file:/// を除去
-  // \\（二重バックスラッシュ）→ \ に正規化してUNCパスに
-  path = '\\\\' + path.replace(/^\\+/, '').replace(/\\\\/g, '\\');
+  // Supabaseに保存されているURLをそのままUNCパスに変換
+  // 例: file:///\\192.168.3.10\kyoway_data\... → \\192.168.3.10\kyoway_data\...
+  let path = url;
+  // file:/// を除去
+  path = path.replace(/^file:\/\/\//, '');
+  // 先頭が \\ でなければ \\ を付ける
+  if (!path.startsWith('\\\\')) {
+    path = '\\\\' + path.replace(/^\\*/, '');
+  }
+  console.log('コピーするパス:', path); // デバッグ用
   navigator.clipboard.writeText(path).then(() => {
-    showToast('📋 パスをコピーしました。エクスプローラーのアドレスバーに貼り付けて開いてください');
+    showToast('📋 パスをコピーしました → エクスプローラーのアドレスバーに貼り付けてEnter');
   }).catch(() => {
-    prompt('以下のパスをコピーしてエクスプローラーに貼り付けてください:', path);
+    prompt('以下のパスをコピー → エクスプローラーに貼り付けてください:', path);
   });
 }
 
