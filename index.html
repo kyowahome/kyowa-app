@@ -7244,45 +7244,34 @@ function printEnvelope() {
   const addr     = p.顧客?.現場住所 || '';
 
   // =========================================
-  // 長3封筒 120mm × 235mm 縦長
-  // 回転なし（下から給紙はプリンター側で設定）
+  // 長3封筒 120mm × 235mm 縦長・回転なし
   //
   // 【郵便番号】12pt・横書き・ゴシック体
-  //   1文字目中心: 左66.5mm・上16mm
-  //   ピッチ: 11mm（3桁目と4桁目の間+2mm）
+  //   1文字目中心: 左67.5mm・上19mm（16+3mm補正）
+  //   ピッチ: 7mm（実測42mm÷6）
   //
   // 【住所】18pt・縦書き・ゴシック体
   //   1文字目中心: 左90mm・上30mm
   //
   // 【名前】24pt・縦書き・ゴシック体・letter-spacing:0.5em
   //   1文字目中心: 左65mm・上50mm
-  //   「様」は1文字空けて続ける
   // =========================================
 
-  // 郵便番号：各文字を中心基準で配置
-  // ※66.5mmを1文字目の中心として、そこから右に展開
-  //   7文字目: 66.5 + 6*11 + 2 = 134.5mm > 120mm
-  //   → 封筒に収めるため、グループ全体を中心66.5mmとして配置
-  //   グループスパン: 6*11+2=68mm、中心=34mm
-  //   1文字目: 66.5-34=32.5mm, 最終: 32.5+68=100.5mm
-  const ZIP_X = [32.5, 43.5, 54.5, 67.5, 78.5, 89.5, 100.5];
-  const ZIP_Y_CENTER = 16; // mm（文字中心の上端からの距離）
-
-  // ptをmmに変換（1pt = 0.353mm）
   const pt2mm = (pt) => pt * 0.353;
-  const ZIP_SIZE_MM   = pt2mm(12);   // 12pt = 4.24mm
-  const ADDR_SIZE_MM  = pt2mm(18);   // 18pt = 6.35mm
-  const NAME_SIZE_MM  = pt2mm(24);   // 24pt = 8.47mm
+  const ZIP_SIZE_MM  = pt2mm(12);  // 4.24mm
+  const ADDR_SIZE_MM = pt2mm(18);  // 6.35mm
+  const NAME_SIZE_MM = pt2mm(24);  // 8.47mm
 
-  // 文字中心を指定位置に合わせるため、top = 中心Y - フォントサイズ/2
-  const zipTopEdge  = ZIP_Y_CENTER  - ZIP_SIZE_MM  / 2;
-  const addrTopEdge = 30            - ADDR_SIZE_MM / 2;
-  const nameTopEdge = 50            - NAME_SIZE_MM / 2;
+  // 郵便番号：先頭67.5mm、7mmピッチ
+  const ZIP_Y_CENTER = 19;  // 16mm + 3mm補正
+  const ZIP_PITCH    = 7;   // mm（42mm÷6）
+  const ZIP_X0       = 67.5;
+  const zipTopEdge   = ZIP_Y_CENTER - ZIP_SIZE_MM / 2;
 
   const toZipHtml = zipRaw.split('').map((c, i) => `
     <div style="
       position:absolute;
-      left:${ZIP_X[i]}mm;
+      left:${(ZIP_X0 + i * ZIP_PITCH).toFixed(1)}mm;
       top:${zipTopEdge.toFixed(2)}mm;
       transform:translateX(-50%);
       font-family:'MS Gothic','Yu Gothic',sans-serif;
@@ -7292,6 +7281,7 @@ function printEnvelope() {
       white-space:nowrap;
     ">${c.trim()}</div>`).join('');
 
+  const addrTopEdge = 30 - ADDR_SIZE_MM / 2;
   const addrHtml = addr ? `
     <div style="
       position:absolute;
@@ -7307,6 +7297,7 @@ function printEnvelope() {
       white-space:nowrap;
     ">${addr}</div>` : '';
 
+  const nameTopEdge = 50 - NAME_SIZE_MM / 2;
   const nameHtml = `
     <div style="
       position:absolute;
@@ -7322,16 +7313,25 @@ function printEnvelope() {
       white-space:nowrap;
     ">${custName}　様</div>`;
 
-  // グリッド線（10mmごと）デバッグ用
+  // グリッド（濃くして見やすく）
   let gridHtml = '';
   for (let y = 0; y <= 235; y += 10) {
-    const color = y % 50 === 0 ? 'rgba(255,0,0,0.3)' : 'rgba(0,0,0,0.1)';
-    gridHtml += `<div style="position:absolute;left:0;right:0;top:${y}mm;height:0.3px;background:${color}"></div>`;
-    if (y % 20 === 0) gridHtml += `<div style="position:absolute;left:1mm;top:${y+0.5}mm;font-size:7pt;color:#999;font-family:monospace">${y}</div>`;
+    const isMajor = y % 50 === 0;
+    const color = isMajor ? 'rgba(220,0,0,0.6)' : 'rgba(0,0,0,0.25)';
+    const h = isMajor ? '0.6px' : '0.4px';
+    gridHtml += `<div style="position:absolute;left:0;right:0;top:${y}mm;height:${h};background:${color}"></div>`;
+    if (y % 10 === 0) {
+      gridHtml += `<div style="position:absolute;left:1mm;top:${y+0.8}mm;font-size:8pt;color:#555;font-family:monospace;font-weight:bold">${y}</div>`;
+    }
   }
   for (let x = 0; x <= 120; x += 10) {
-    const color = x % 50 === 0 ? 'rgba(255,0,0,0.3)' : 'rgba(0,0,0,0.1)';
-    gridHtml += `<div style="position:absolute;top:0;bottom:0;left:${x}mm;width:0.3px;background:${color}"></div>`;
+    const isMajor = x % 50 === 0;
+    const color = isMajor ? 'rgba(220,0,0,0.6)' : 'rgba(0,0,0,0.25)';
+    const w = isMajor ? '0.6px' : '0.4px';
+    gridHtml += `<div style="position:absolute;top:0;bottom:0;left:${x}mm;width:${w};background:${color}"></div>`;
+    if (x % 20 === 0 && x > 0) {
+      gridHtml += `<div style="position:absolute;top:1mm;left:${x+0.5}mm;font-size:8pt;color:#555;font-family:monospace;font-weight:bold">${x}</div>`;
+    }
   }
 
   const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>長3封筒</title>
@@ -7339,59 +7339,31 @@ function printEnvelope() {
   @page { size:120mm 235mm; margin:0 }
   * { box-sizing:border-box; margin:0; padding:0 }
   html { width:120mm; height:235mm }
-  body {
-    width:120mm;
-    height:235mm;
-    overflow:hidden;
-    position:relative;
-    background:#fff;
-    border:0.5px solid #ccc;
-  }
+  body { width:120mm; height:235mm; overflow:hidden; position:relative; background:#fff; }
   .ctrl {
-    position:fixed;
-    bottom:0;
-    left:0;
-    right:0;
-    background:rgba(240,240,240,0.95);
-    padding:6px;
-    text-align:center;
-    z-index:99;
-    font-family:sans-serif;
-    font-size:11px;
+    position:fixed; bottom:0; left:0; right:0;
+    background:rgba(240,240,240,0.97); padding:6px;
+    text-align:center; z-index:99; font-family:sans-serif; font-size:11px;
     border-top:1px solid #bbb;
   }
-  .ctrl button {
-    padding:4px 14px;
-    margin:0 3px;
-    border:none;
-    border-radius:3px;
-    cursor:pointer;
-  }
-  @media print {
-    .ctrl { display:none }
-    body { border:none }
-  }
+  .ctrl button { padding:4px 14px; margin:0 3px; border:none; border-radius:3px; cursor:pointer }
+  @media print { .ctrl { display:none } }
 </style></head><body>
 
-<!-- グリッド（確認用・印刷では薄く表示） -->
-<div style="position:absolute;inset:0;pointer-events:none;opacity:0.4">
+<!-- グリッド -->
+<div id="grid" style="position:absolute;inset:0;pointer-events:none">
   ${gridHtml}
 </div>
 
-<!-- 郵便番号 -->
 ${toZipHtml}
-
-<!-- 住所 -->
 ${addrHtml}
-
-<!-- 名前 -->
 ${nameHtml}
 
 <div class="ctrl">
-  <button style="background:#333;color:#fff" onclick="document.querySelector('.ctrl').style.display='none';setTimeout(()=>{window.print();document.querySelector('.ctrl').style.display='';},100)">🖨 印刷（グリッド付き）</button>
-  <button style="background:#1976d2;color:#fff" onclick="document.querySelectorAll('[style*=opacity]').forEach(e=>e.style.opacity='0');document.querySelector('.ctrl').style.display='none';setTimeout(()=>{window.print();document.querySelectorAll('[style*=opacity]').forEach(e=>e.style.opacity='0.4');document.querySelector('.ctrl').style.display='';},100)">🖨 印刷（グリッドなし）</button>
+  <button style="background:#333;color:#fff" onclick="document.querySelector('.ctrl').style.display='none';setTimeout(()=>{window.print();document.querySelector('.ctrl').style.display='';},100)">🖨 グリッド付き印刷</button>
+  <button style="background:#1976d2;color:#fff" onclick="document.getElementById('grid').style.display='none';document.querySelector('.ctrl').style.display='none';setTimeout(()=>{window.print();document.getElementById('grid').style.display='';document.querySelector('.ctrl').style.display='';},100)">🖨 グリッドなし印刷</button>
   <button style="background:#888;color:#fff" onclick="window.close()">閉じる</button>
-  <span style="color:#c00;margin-left:8px">グリッド線=10mm間隔（赤=50mm）</span>
+  <span style="color:#c00;margin-left:8px;font-size:10px">グリッド10mm間隔（赤=50mm）</span>
 </div>
 
 </body></html>`;
