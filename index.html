@@ -263,7 +263,7 @@
           月別契約金額（今年 vs 昨年）
           <span style="font-size:11px;color:var(--text-hint);font-weight:400">百万円　※今年の月をクリックで受注一覧へ</span>
         </div>
-        <div style="position:relative;height:110px">
+        <div style="position:relative;height:165px">
           <canvas id="chart-monthly"></canvas>
         </div>
         <div id="chart-monthly-totals" style="display:flex;gap:16px;margin-top:6px;font-size:11px;color:var(--text-sub);padding-left:8px"></div>
@@ -2553,17 +2553,13 @@ async function loadDashboard() {
     const isFuture  = m > thisM;
     const isCurrent = m === thisM;
 
-    // 今年：明るい水色グラデーション・今月は赤橙・未来は透明
-    const thisColors = [
-      '#e3f2fd','#bbdefb','#90caf9','#64b5f6','#42a5f5','#2196f3',
-      '#1e88e5','#1976d2','#1565c0','#0d47a1','#1a237e','#283593',
-    ];
-    const thisColor  = isFuture ? 'rgba(0,0,0,0)' : isCurrent ? '#ff6d00' : thisColors[mi];
-    const thisBorder = isFuture ? 'rgba(0,0,0,0)' : isCurrent ? '#e65100' : '#1976d2';
+    // 今年：#99FF99（先月以前）、今月はオレンジ赤、未来は透明
+    const thisColor  = isFuture ? 'rgba(0,0,0,0)' : isCurrent ? '#ff6d00' : '#99FF99';
+    const thisBorder = isFuture ? 'rgba(0,0,0,0)' : '#000';
 
     // 昨年：グレー1色
     const lastColor  = 'rgba(120,144,156,0.45)';
-    const lastBorder = '#78909c';
+    const lastBorder = '#000';
 
     return {
       label: `${m}月`,
@@ -2597,8 +2593,8 @@ async function loadDashboard() {
           if (mi < months.length - 1 && val > 0) {
             ctx.save();
             ctx.beginPath();
-            ctx.setLineDash([4, 3]);
-            ctx.strokeStyle = barIdx === 0 ? 'rgba(13,71,161,0.55)' : 'rgba(55,71,79,0.5)';
+            ctx.setLineDash([2, 2]);
+            ctx.strokeStyle = '#000';
             ctx.lineWidth = 1.2;
             ctx.moveTo(cumX, barTop + 1);
             ctx.lineTo(cumX, barBottom - 1);
@@ -7247,79 +7243,77 @@ function printEnvelope() {
   const zipRaw   = (p.顧客?.郵便番号||'').replace(/[^0-9]/g,'').padEnd(7,' ');
   const addr     = p.顧客?.現場住所 || '';
 
-  // 長3封筒 縦向き: 120×235mm
-  // スキャン確認：郵便番号枠は上端から約17mm、左から約20mm位置
-  // 各マス幅11mm（8mm枠+3mm間隔）、3-4桁間+2mm追加
+  // 郵便番号ボックス（右+41mm、下+4mm、文字2倍32px）
+  // 現在: left=20+i*11+(i>=3?2:0), top=17mm
+  // 新: left=61+i*11+(i>=3?2:0), top=21mm
   const toZipHtml = zipRaw.split('').map((c, i) => {
-    const left = 20 + i * 11 + (i >= 3 ? 2 : 0);
-    return `<div style="position:absolute;left:${left}mm;top:17mm;width:8mm;height:10mm;
+    const left = 61 + i * 11 + (i >= 3 ? 2 : 0);
+    return `<div style="position:absolute;left:${left}mm;top:21mm;width:8mm;height:10mm;
       display:flex;align-items:center;justify-content:center;
-      font-family:'MS Gothic',monospace;font-size:16px;font-weight:bold;color:#000">${c.trim()}</div>`;
+      font-family:'MS Gothic',monospace;font-size:32px;font-weight:bold;color:#000">${c.trim()}</div>`;
   }).join('');
 
-  // 絶対位置で住所（右）と氏名（中央左）を別列に配置
-  // スキャン確認：住所は名前と同じ列になっていた → 絶対位置で完全分離
+  // 下から給紙: body全体を180度回転
+  // 住所: 右+20mm(left=75mm)、下+10mm(top=42mm)、フォント=名前サイズ(54px)
+  // 名前: 横はOK(center)、下+10mm(top=42mm)、フォント1.5倍(54px)
   const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>長3封筒</title>
 <style>
   @page{size:120mm 235mm;margin:0}
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{width:120mm;height:235mm;overflow:hidden;position:relative;background:#fff}
-  body{font-family:'MS Mincho','Yu Mincho','Hiragino Mincho Pro',serif;color:#000}
+  body{
+    font-family:'MS Mincho','Yu Mincho','Hiragino Mincho Pro',serif;color:#000;
+    transform:rotate(180deg);
+    transform-origin:60mm 117.5mm;
+  }
   .np{position:fixed;top:0;left:0;right:0;background:#eee;padding:5px;
-    text-align:center;z-index:99;font-family:sans-serif;font-size:11px}
+    text-align:center;z-index:99;font-family:sans-serif;font-size:11px;
+    transform:rotate(180deg);transform-origin:center;}
   .np button{padding:4px 12px;margin:0 3px;border:none;border-radius:3px;cursor:pointer}
   @media print{.np{display:none}}
 </style></head><body>
 <div class="np">
-  <button style="background:#333;color:#fff" onclick="window.print()">🖨 印刷</button>
+  <button style="background:#333;color:#fff" onclick="window.print()">🖨 印刷（下から給紙）</button>
   <button style="background:#888;color:#fff" onclick="window.close()">閉じる</button>
-  <span style="color:#666;margin-left:6px">長形3号（120×235mm）縦・余白なし</span>
+  <span style="color:#666;margin-left:6px">長形3号 下から給紙・余白なし</span>
 </div>
 
-<!-- 郵便番号（枠に合わせた位置） -->
+<!-- 郵便番号 -->
 ${toZipHtml}
 
-<!-- 住所（右列：封筒右寄り） -->
+<!-- 住所（右+20→left:75mm、下+10→top:42mm、フォント54px） -->
 ${addr ? `<div style="
   position:absolute;
-  top:32mm;
-  right:8mm;
-  width:18mm;
-  bottom:30mm;
+  left:75mm;
+  top:42mm;
   writing-mode:vertical-rl;
   text-orientation:mixed;
-  font-size:16px;
-  line-height:1.8;
+  font-size:54px;
+  line-height:1.6;
   letter-spacing:0.08em;
   white-space:nowrap;
-  overflow:hidden;
 ">${addr}</div>` : ''}
 
-<!-- 氏名（中央列） -->
+<!-- 氏名（横OK・下+10→top:42mm・フォント54px） -->
 <div style="
   position:absolute;
-  top:32mm;
-  left:18mm;
-  right:30mm;
-  bottom:20mm;
+  top:42mm;
+  left:10mm;
+  right:35mm;
   writing-mode:vertical-rl;
   text-orientation:mixed;
   display:flex;
-  flex-direction:row;
   justify-content:center;
   align-items:flex-start;
 ">
-  <div style="font-size:36px;font-weight:bold;line-height:1.4;letter-spacing:0.1em;white-space:nowrap">
-    ${custName}
-  </div>
-  <div style="font-size:24px;font-weight:normal;margin-top:8px;letter-spacing:0.1em">
-    　様
+  <div style="font-size:54px;font-weight:bold;line-height:1.4;letter-spacing:0.1em;white-space:nowrap">
+    ${custName}<span style="font-size:36px;font-weight:normal">　様</span>
   </div>
 </div>
 
 </body></html>`;
 
-  const win = window.open('', '_blank', 'width=460,height=900');
+  const win = window.open('', '_blank', 'width:460,height:900');
   win.document.write(html);
   win.document.close();
   saveDocHistory('封筒', _invOrderData?.id, _invOrderData?.工事番号, _invOrderData?.顧客?.施主名||'', '', 0);
