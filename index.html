@@ -2552,58 +2552,56 @@ async function loadDashboard() {
   const monthDatasets = months.map((m, mi) => {
     const isFuture  = m > thisM;
     const isCurrent = m === thisM;
-    const isPast    = m < thisM;
 
-    const thisColor = isFuture  ? 'rgba(0,0,0,0)'   // 透明（未来月）
-                    : isCurrent ? '#e65100'           // 今月：オレンジ赤
-                    :             '#1976d2';           // 先月以前：青
+    // 今年：明るい水色グラデーション・今月は赤橙・未来は透明
+    const thisColors = [
+      '#e3f2fd','#bbdefb','#90caf9','#64b5f6','#42a5f5','#2196f3',
+      '#1e88e5','#1976d2','#1565c0','#0d47a1','#1a237e','#283593',
+    ];
+    const thisColor  = isFuture ? 'rgba(0,0,0,0)' : isCurrent ? '#ff6d00' : thisColors[mi];
+    const thisBorder = isFuture ? 'rgba(0,0,0,0)' : isCurrent ? '#e65100' : '#1976d2';
 
-    const thisBorder = isFuture ? 'rgba(0,0,0,0)' : isCurrent ? '#bf360c' : '#1565c0';
-    const lastColor  = 'rgba(120,144,156,0.5)';      // 昨年：グレー（旧グラフ色）
-    const lastBorder = '#90a4ae';
+    // 昨年：グレー1色
+    const lastColor  = 'rgba(120,144,156,0.45)';
+    const lastBorder = '#78909c';
 
     return {
       label: `${m}月`,
       data: [toM(thisMonthly[mi]), toM(lastMonthly[mi])],  // [今年, 昨年]
       backgroundColor: [thisColor, lastColor],
       borderColor:     [thisBorder, lastBorder],
-      borderWidth: 1,
+      borderWidth: [isFuture ? 0 : 1, 1],
       stack: 'stack',
-      barThickness: 38,
     };
   });
 
-  // 点線プラグイン：各月の境界に縦の点線を描く
+  // 点線プラグイン
   const dashedDividerPlugin = {
     id: 'dashedDivider',
     afterDraw(chart) {
-      const { ctx, scales, chartArea } = chart;
+      const { ctx, scales } = chart;
       const xScale = scales.x;
       const yScale = scales.y;
       if (!xScale || !yScale) return;
-
-      // 今年と昨年のバーのY座標
       [0, 1].forEach(barIdx => {
-        const meta = chart.getDatasetMeta(0); // 1月のmeta
-        if (!meta || !meta.data || !meta.data[barIdx]) return;
-        const bar = meta.data[barIdx];
+        const meta0 = chart.getDatasetMeta(0);
+        if (!meta0?.data?.[barIdx]) return;
+        const bar = meta0.data[barIdx];
         const barTop    = bar.y - bar.height / 2;
         const barBottom = bar.y + bar.height / 2;
-
-        // 各月の境界X座標を計算して点線を描く
-        let cumX = xScale.left;
+        let cumX = xScale.getPixelForValue(0);
         months.forEach((m, mi) => {
-          const barIdx2 = barIdx; // 0=今年, 1=昨年
           const val = barIdx === 0 ? toM(thisMonthly[mi]) : toM(lastMonthly[mi]);
-          cumX += val > 0 ? xScale.getPixelForValue(val) - xScale.getPixelForValue(0) : 0;
+          const px  = val > 0 ? (xScale.getPixelForValue(val) - xScale.getPixelForValue(0)) : 0;
+          cumX += px;
           if (mi < months.length - 1 && val > 0) {
             ctx.save();
             ctx.beginPath();
-            ctx.setLineDash([3, 3]);
-            ctx.strokeStyle = barIdx === 0 ? 'rgba(21,101,192,0.7)' : 'rgba(96,125,139,0.7)';
-            ctx.lineWidth = 1;
-            ctx.moveTo(cumX, barTop);
-            ctx.lineTo(cumX, barBottom);
+            ctx.setLineDash([4, 3]);
+            ctx.strokeStyle = barIdx === 0 ? 'rgba(13,71,161,0.55)' : 'rgba(55,71,79,0.5)';
+            ctx.lineWidth = 1.2;
+            ctx.moveTo(cumX, barTop + 1);
+            ctx.lineTo(cumX, barBottom - 1);
             ctx.stroke();
             ctx.restore();
           }
@@ -2628,22 +2626,25 @@ async function loadDashboard() {
         maintainAspectRatio: false,
         onClick: (e, els) => {
           if (!els.length) return;
-          const dsIdx = els[0].datasetIndex; // 月index(0=1月)
-          const barIdx = els[0].index;       // 0=今年, 1=昨年
+          const dsIdx = els[0].datasetIndex;
+          const barIdx = els[0].index; // 0=今年, 1=昨年
           if (barIdx === 0) _jumpToMonthOrders(thisY, months[dsIdx]);
+        },
+        interaction: {
+          mode: 'nearest',    // ホバーした月だけ表示
+          axis: 'x',
+          intersect: true,
         },
         plugins: {
           legend: { display: false },
           tooltip: {
-            mode: 'index',
-            filter: (item) => Number(item.raw) > 0,
             callbacks: {
-              title: (items) => items.length ? items[0].label : '',
-              label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.raw).toFixed(1)}百万`,
-              footer: (items) => {
-                const t = items.reduce((s,i) => s + Number(i.raw||0), 0);
-                return `合計: ${t.toFixed(1)}百万`;
+              title: (items) => {
+                const barLabel = items[0].label;      // 今年/昨年
+                const month    = items[0].dataset.label; // 〇月
+                return `${barLabel}　${month}`;
               },
+              label: (ctx) => ` ${Number(ctx.raw).toFixed(1)} 百万円`,
             },
           },
         },
@@ -2656,6 +2657,9 @@ async function loadDashboard() {
           y: {
             stacked: true,
             ticks: { font: { size: 13, weight: 'bold' } },
+            // バー間に隙間を作る
+            categoryPercentage: 0.6,
+            barPercentage: 0.8,
           },
         },
       },
@@ -7244,19 +7248,17 @@ function printEnvelope() {
   const addr     = p.顧客?.現場住所 || '';
 
   // 長3封筒 縦向き: 120×235mm
-  // JIS X 6228: 郵便番号枠は上から約10mm、左辺から約20mmに7マス
-  // 各マス幅8mm・高さ8mm・マス間隔3mm・3桁目と4桁目の間+2mm(計5mm)
-  // 枠は封筒に印刷済み → 印字位置を枠中央に合わせる
+  // スキャン確認：郵便番号枠は上端から約17mm、左から約20mm位置
+  // 各マス幅11mm（8mm枠+3mm間隔）、3-4桁間+2mm追加
   const toZipHtml = zipRaw.split('').map((c, i) => {
     const left = 20 + i * 11 + (i >= 3 ? 2 : 0);
-    return `<div style="position:absolute;left:${left}mm;top:9mm;width:8mm;height:8mm;
+    return `<div style="position:absolute;left:${left}mm;top:17mm;width:8mm;height:10mm;
       display:flex;align-items:center;justify-content:center;
-      font-family:'MS Gothic',monospace;font-size:14px;font-weight:bold;color:#000">${c.trim()}</div>`;
+      font-family:'MS Gothic',monospace;font-size:16px;font-weight:bold;color:#000">${c.trim()}</div>`;
   }).join('');
 
-  // 縦書きレイアウト：右=住所(小)、左/中央=氏名(大)
-  // 縦書き(writing-mode:vertical-rl)はflexで右→左に並ぶため
-  // 右に出したい住所を先に(rightmost)、氏名を後に
+  // 絶対位置で住所（右）と氏名（中央左）を別列に配置
+  // スキャン確認：住所は名前と同じ列になっていた → 絶対位置で完全分離
   const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>長3封筒</title>
 <style>
   @page{size:120mm 235mm;margin:0}
@@ -7274,20 +7276,44 @@ function printEnvelope() {
   <span style="color:#666;margin-left:6px">長形3号（120×235mm）縦・余白なし</span>
 </div>
 
-<!-- 郵便番号（枠の位置に印字） -->
+<!-- 郵便番号（枠に合わせた位置） -->
 ${toZipHtml}
 
-<!-- 住所・氏名（縦書き）
-     writing-mode:vertical-rl のflexboxは右から左に並ぶ
-     → 住所divを先に書くと右側に配置される
-     → 氏名divを後に書くと住所の左側に配置される  -->
-<div style="position:absolute;top:28mm;left:6mm;right:6mm;bottom:10mm;
-  writing-mode:vertical-rl;text-orientation:mixed;
-  display:flex;flex-direction:row;justify-content:center;align-items:flex-start;gap:6mm">
-  ${addr ? `<div style="font-size:13px;line-height:2;letter-spacing:0.1em;white-space:nowrap;
-    padding-top:4mm">${addr}</div>` : ''}
-  <div style="font-size:30px;font-weight:bold;line-height:1.4;letter-spacing:0.1em;white-space:nowrap">
-    ${custName}<span style="font-size:21px;font-weight:normal">　様</span>
+<!-- 住所（右列：封筒右寄り） -->
+${addr ? `<div style="
+  position:absolute;
+  top:32mm;
+  right:8mm;
+  width:18mm;
+  bottom:30mm;
+  writing-mode:vertical-rl;
+  text-orientation:mixed;
+  font-size:16px;
+  line-height:1.8;
+  letter-spacing:0.08em;
+  white-space:nowrap;
+  overflow:hidden;
+">${addr}</div>` : ''}
+
+<!-- 氏名（中央列） -->
+<div style="
+  position:absolute;
+  top:32mm;
+  left:18mm;
+  right:30mm;
+  bottom:20mm;
+  writing-mode:vertical-rl;
+  text-orientation:mixed;
+  display:flex;
+  flex-direction:row;
+  justify-content:center;
+  align-items:flex-start;
+">
+  <div style="font-size:36px;font-weight:bold;line-height:1.4;letter-spacing:0.1em;white-space:nowrap">
+    ${custName}
+  </div>
+  <div style="font-size:24px;font-weight:normal;margin-top:8px;letter-spacing:0.1em">
+    　様
   </div>
 </div>
 
