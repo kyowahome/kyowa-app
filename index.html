@@ -2545,22 +2545,72 @@ async function loadDashboard() {
      <span style="margin-left:12px">昨年合計: <b>¥${Math.round(totalLast/10000).toLocaleString()}万</b></span>
      <span style="margin-left:12px">今月(${thisM}月): <b>¥${thisMonthAmt.toLocaleString()}円</b></span>`;
 
-  // 月ごとの色（青系グラデーション。今月だけ赤）
-  const MONTH_COLORS = [
-    '#bbdefb','#90caf9','#64b5f6','#42a5f5','#2196f3','#1e88e5',
-    '#1976d2','#1565c0','#0d47a1','#1a237e','#283593','#3949ab',
-  ];
+  // ラベル: 上=今年, 下=昨年（indexAxis:'y' で上が先頭）
+  // datasets: 各月を1セット。data=[今年の値, 昨年の値]
+  // 今年: 先月以前=青, 今月=赤, 未来=透明
+  // 昨年: グレー1色（rgba(120,144,156,0.5) 旧棒グラフと同色）
+  const monthDatasets = months.map((m, mi) => {
+    const isFuture  = m > thisM;
+    const isCurrent = m === thisM;
+    const isPast    = m < thisM;
 
-  // 各月を1データセット（今年・昨年 2本分）
-  const monthDatasets = months.map((m, mi) => ({
-    label: `${m}月`,
-    // indexAxis:'y' なので data=[昨年の値, 今年の値]（上が今年、下が昨年）
-    data: [toM(lastMonthly[mi]), toM(thisMonthly[mi])],
-    backgroundColor: m === thisM ? '#e65100' : MONTH_COLORS[mi],
-    borderWidth: 0,
-    stack: 'stack',
-    barThickness: 36,
-  }));
+    const thisColor = isFuture  ? 'rgba(0,0,0,0)'   // 透明（未来月）
+                    : isCurrent ? '#e65100'           // 今月：オレンジ赤
+                    :             '#1976d2';           // 先月以前：青
+
+    const thisBorder = isFuture ? 'rgba(0,0,0,0)' : isCurrent ? '#bf360c' : '#1565c0';
+    const lastColor  = 'rgba(120,144,156,0.5)';      // 昨年：グレー（旧グラフ色）
+    const lastBorder = '#90a4ae';
+
+    return {
+      label: `${m}月`,
+      data: [toM(thisMonthly[mi]), toM(lastMonthly[mi])],  // [今年, 昨年]
+      backgroundColor: [thisColor, lastColor],
+      borderColor:     [thisBorder, lastBorder],
+      borderWidth: 1,
+      stack: 'stack',
+      barThickness: 38,
+    };
+  });
+
+  // 点線プラグイン：各月の境界に縦の点線を描く
+  const dashedDividerPlugin = {
+    id: 'dashedDivider',
+    afterDraw(chart) {
+      const { ctx, scales, chartArea } = chart;
+      const xScale = scales.x;
+      const yScale = scales.y;
+      if (!xScale || !yScale) return;
+
+      // 今年と昨年のバーのY座標
+      [0, 1].forEach(barIdx => {
+        const meta = chart.getDatasetMeta(0); // 1月のmeta
+        if (!meta || !meta.data || !meta.data[barIdx]) return;
+        const bar = meta.data[barIdx];
+        const barTop    = bar.y - bar.height / 2;
+        const barBottom = bar.y + bar.height / 2;
+
+        // 各月の境界X座標を計算して点線を描く
+        let cumX = xScale.left;
+        months.forEach((m, mi) => {
+          const barIdx2 = barIdx; // 0=今年, 1=昨年
+          const val = barIdx === 0 ? toM(thisMonthly[mi]) : toM(lastMonthly[mi]);
+          cumX += val > 0 ? xScale.getPixelForValue(val) - xScale.getPixelForValue(0) : 0;
+          if (mi < months.length - 1 && val > 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.setLineDash([3, 3]);
+            ctx.strokeStyle = barIdx === 0 ? 'rgba(21,101,192,0.7)' : 'rgba(96,125,139,0.7)';
+            ctx.lineWidth = 1;
+            ctx.moveTo(cumX, barTop);
+            ctx.lineTo(cumX, barBottom);
+            ctx.stroke();
+            ctx.restore();
+          }
+        });
+      });
+    }
+  };
 
   if (_charts['chart-monthly']) { _charts['chart-monthly'].destroy(); delete _charts['chart-monthly']; }
   const ctxM = document.getElementById('chart-monthly');
@@ -2568,29 +2618,31 @@ async function loadDashboard() {
     _charts['chart-monthly'] = new Chart(ctxM, {
       type: 'bar',
       data: {
-        labels: [`昨年(${lastY})`, `今年(${thisY})`],
+        labels: [`今年(${thisY})`, `昨年(${lastY})`],
         datasets: monthDatasets,
       },
+      plugins: [dashedDividerPlugin],
       options: {
-        indexAxis: 'y',   // ← 横向き棒グラフ
+        indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
         onClick: (e, els) => {
           if (!els.length) return;
           const dsIdx = els[0].datasetIndex; // 月index(0=1月)
-          const barIdx = els[0].index;       // 0=昨年, 1=今年
-          if (barIdx === 1) _jumpToMonthOrders(thisY, months[dsIdx]);
+          const barIdx = els[0].index;       // 0=今年, 1=昨年
+          if (barIdx === 0) _jumpToMonthOrders(thisY, months[dsIdx]);
         },
         plugins: {
           legend: { display: false },
           tooltip: {
             mode: 'index',
+            filter: (item) => Number(item.raw) > 0,
             callbacks: {
-              title: (items) => `${items[0].label} ${items[0].dataset.label}`,
-              label: (ctx) => ` ${ctx.raw.toFixed(1)}百万円`,
+              title: (items) => items.length ? items[0].label : '',
+              label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.raw).toFixed(1)}百万`,
               footer: (items) => {
-                const total = items.reduce((s, i) => s + Number(i.raw), 0);
-                return `合計: ${total.toFixed(1)}百万円`;
+                const t = items.reduce((s,i) => s + Number(i.raw||0), 0);
+                return `合計: ${t.toFixed(1)}百万`;
               },
             },
           },
@@ -2599,7 +2651,7 @@ async function loadDashboard() {
           x: {
             stacked: true,
             ticks: { callback: v => v + 'M', font: { size: 10 } },
-            grid: { color: 'rgba(0,0,0,0.08)' },
+            grid: { color: 'rgba(0,0,0,0.07)' },
           },
           y: {
             stacked: true,
@@ -7191,57 +7243,57 @@ function printEnvelope() {
   const zipRaw   = (p.顧客?.郵便番号||'').replace(/[^0-9]/g,'').padEnd(7,' ');
   const addr     = p.顧客?.現場住所 || '';
 
-  // 封筒を横向きで使用（長辺が水平：235mm×120mm）
-  // 郵便番号枠は封筒に印刷済み（上部中央）
-  // 印字するのは住所と氏名のみ
-
-  // 横向き封筒（@page size: 235mm 120mm）
-  // 郵便番号枠の位置（封筒の印刷枠に合わせて印字）
-  // 枠は上端から約10mm、中央付近（235mmの中央=117.5mm）から左右に広がる
-  // 3+4桁、各マス8×8mm、間隔3mm、3-4桁間+2mm
-  // 全体幅: 8*7 + 3*6 + 2 = 56+18+2 = 76mm → 中央: (235-76)/2 = 79.5mm から開始
-  const zipLeft = 79.5;
+  // 長3封筒 縦向き: 120×235mm
+  // JIS X 6228: 郵便番号枠は上から約10mm、左辺から約20mmに7マス
+  // 各マス幅8mm・高さ8mm・マス間隔3mm・3桁目と4桁目の間+2mm(計5mm)
+  // 枠は封筒に印刷済み → 印字位置を枠中央に合わせる
   const toZipHtml = zipRaw.split('').map((c, i) => {
-    const left = zipLeft + i * 11 + (i >= 3 ? 2 : 0);
-    return `<div style="position:absolute;left:${left}mm;top:8mm;width:8mm;height:8mm;
-      border:1.5px solid #e00;display:flex;align-items:center;justify-content:center;
+    const left = 20 + i * 11 + (i >= 3 ? 2 : 0);
+    return `<div style="position:absolute;left:${left}mm;top:9mm;width:8mm;height:8mm;
+      display:flex;align-items:center;justify-content:center;
       font-family:'MS Gothic',monospace;font-size:14px;font-weight:bold;color:#000">${c.trim()}</div>`;
   }).join('');
 
-  // 住所・氏名：縦書きで封筒中央に大きく
+  // 縦書きレイアウト：右=住所(小)、左/中央=氏名(大)
+  // 縦書き(writing-mode:vertical-rl)はflexで右→左に並ぶため
+  // 右に出したい住所を先に(rightmost)、氏名を後に
   const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>長3封筒</title>
 <style>
-  @page{size:235mm 120mm;margin:0}
+  @page{size:120mm 235mm;margin:0}
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{width:235mm;height:120mm;overflow:hidden;position:relative;background:#fff}
+  html,body{width:120mm;height:235mm;overflow:hidden;position:relative;background:#fff}
   body{font-family:'MS Mincho','Yu Mincho','Hiragino Mincho Pro',serif;color:#000}
-  .np{position:fixed;top:0;left:0;right:0;background:#eee;padding:5px;text-align:center;z-index:99;font-family:sans-serif;font-size:11px}
+  .np{position:fixed;top:0;left:0;right:0;background:#eee;padding:5px;
+    text-align:center;z-index:99;font-family:sans-serif;font-size:11px}
   .np button{padding:4px 12px;margin:0 3px;border:none;border-radius:3px;cursor:pointer}
   @media print{.np{display:none}}
 </style></head><body>
 <div class="np">
   <button style="background:#333;color:#fff" onclick="window.print()">🖨 印刷</button>
   <button style="background:#888;color:#fff" onclick="window.close()">閉じる</button>
-  <span style="color:#666;margin-left:6px">長形3号 横向き（235×120mm）・余白なし</span>
+  <span style="color:#666;margin-left:6px">長形3号（120×235mm）縦・余白なし</span>
 </div>
 
-<!-- 郵便番号（枠に合わせた印字） -->
+<!-- 郵便番号（枠の位置に印字） -->
 ${toZipHtml}
 
-<!-- 住所・氏名（縦書き・右寄り・大きく） -->
-<div style="position:absolute;top:20mm;left:50mm;right:10mm;bottom:8mm;
-  display:flex;flex-direction:row;justify-content:center;align-items:center;gap:8mm">
-  ${addr ? `<div style="writing-mode:vertical-rl;text-orientation:mixed;
-    font-size:15px;line-height:2;letter-spacing:0.12em;white-space:nowrap">${addr}</div>` : ''}
-  <div style="writing-mode:vertical-rl;text-orientation:mixed;
-    font-size:30px;font-weight:bold;line-height:1.4;letter-spacing:0.1em;white-space:nowrap">
-    ${custName}<span style="font-size:22px;font-weight:normal">　様</span>
+<!-- 住所・氏名（縦書き）
+     writing-mode:vertical-rl のflexboxは右から左に並ぶ
+     → 住所divを先に書くと右側に配置される
+     → 氏名divを後に書くと住所の左側に配置される  -->
+<div style="position:absolute;top:28mm;left:6mm;right:6mm;bottom:10mm;
+  writing-mode:vertical-rl;text-orientation:mixed;
+  display:flex;flex-direction:row;justify-content:center;align-items:flex-start;gap:6mm">
+  ${addr ? `<div style="font-size:13px;line-height:2;letter-spacing:0.1em;white-space:nowrap;
+    padding-top:4mm">${addr}</div>` : ''}
+  <div style="font-size:30px;font-weight:bold;line-height:1.4;letter-spacing:0.1em;white-space:nowrap">
+    ${custName}<span style="font-size:21px;font-weight:normal">　様</span>
   </div>
 </div>
 
 </body></html>`;
 
-  const win = window.open('', '_blank', 'width=900,height=480');
+  const win = window.open('', '_blank', 'width=460,height=900');
   win.document.write(html);
   win.document.close();
   saveDocHistory('封筒', _invOrderData?.id, _invOrderData?.工事番号, _invOrderData?.顧客?.施主名||'', '', 0);
