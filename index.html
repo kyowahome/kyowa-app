@@ -6578,9 +6578,12 @@ async function bulkSetFolderUrls() {
   
   for (let i = 0; i < total; i++) {
     const item = FOLDER_URL_DATA[i];
+    // 工事番号をDBフォーマット（ハイフン付き）に変換: 2209036 → 2209-036
+    const rawNo = String(item.工事番号).replace(/[^0-9]/g,'').padStart(7,'0');
+    const kojiNo = rawNo.slice(0,4) + '-' + rawNo.slice(4);
     const { error } = await db.from('工事案件')
       .update({ 'フォルダURL': item.フォルダURL })
-      .eq('工事番号', item.工事番号);
+      .eq('工事番号', kojiNo);
     
     if (error) {
       err++;
