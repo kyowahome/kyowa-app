@@ -2517,8 +2517,9 @@ async function loadDashboard() {
     .not('計測日','is',null);
   const sokuteis = sokuteiData || [];
 
-  // ===== KPIカード（入金一覧と同じ計算） =====
-  await loadUnpaidKpi();
+  // ===== KPIカード（非同期で後から表示）=====
+  // グラフと並列実行 → グラフを待たせない
+  loadUnpaidKpi(); // awaitしない
 
   // ===== 月別契約金額グラフ =====
   const months = Array.from({length:12}, (_,i) => i+1);
@@ -7159,95 +7160,69 @@ function printEnvelope() {
   const p  = _invOrderData;
   const co = INVOICE_COMPANIES[document.getElementById('inv-branch').value];
   const custName = p.顧客?.施主名 || '';
-  const zipRaw   = (p.顧客?.郵便番号||'').replace(/[^0-9]/g,'');
+  const zipRaw   = (p.顧客?.郵便番号||'').replace(/[^0-9]/g,'').padEnd(7,' ');
   const addr     = p.顧客?.現場住所 || '';
+  const fromZip  = (co.zip||'').replace(/[^0-9]/g,'').padEnd(7,' ');
 
-  // 郵便番号ボックス（赤枠7マス）
-  const makeZipBoxes = (zip, color='#d00') => zip.padEnd(7,'').split('').map((c,i) =>
-    `<span style="display:inline-flex;align-items:center;justify-content:center;
-      width:11mm;height:11mm;border:1.5px solid ${color};font-size:15px;font-weight:bold;
-      font-family:'MS Gothic',monospace;${i===2?'margin-right:3mm':''}">${c}</span>`
-  ).join('');
+  // JIS X 6228 長3封筒(120×235mm) 宛先郵便番号枠
+  // 上辺から22mm、左辺から20mm、各マス8×8mm、間隔3mm、3桁目後に2mm追加
+  const toZipHtml = zipRaw.split('').map((c, i) => {
+    const left = 20 + i * 11 + (i >= 3 ? 2 : 0);
+    return `<div style="position:absolute;left:${left}mm;top:22mm;width:8mm;height:8mm;
+      border:1px solid #e00;display:flex;align-items:center;justify-content:center;
+      font-family:'MS Gothic',monospace;font-size:13px;font-weight:bold;color:#000">${c.trim()}</div>`;
+  }).join('');
 
-  // 差出人郵便番号（小・黒）
-  const fromZipBoxes = (co.zip||'').replace(/[^0-9]/g,'').padEnd(7,'').split('').map((c,i) =>
-    `<span style="display:inline-flex;align-items:center;justify-content:center;
-      width:6mm;height:7mm;border:1px solid #666;font-size:10px;
-      font-family:'MS Gothic',monospace;${i===2?'margin-right:2mm':''}">${c}</span>`
-  ).join('');
+  // 差出人郵便番号（小枠）
+  const fromZipHtml = '<div style="display:flex;margin-bottom:1.5mm">' +
+    fromZip.split('').map((c, i) =>
+      `<div style="width:4.5mm;height:5mm;border:0.8px solid #555;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:8px">${c.trim()}</div>` +
+      (i === 2 ? '<div style="width:1.5mm"></div>' : '')
+    ).join('') + '</div>';
 
   const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>長3封筒</title>
 <style>
   @page{size:120mm 235mm;margin:0}
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{width:120mm;height:235mm;overflow:hidden;position:relative}
-  body{font-family:'MS Mincho','Yu Mincho','Hiragino Mincho Pro',serif;color:#000}
-  .no-print{position:fixed;top:0;left:0;right:0;background:#f5f5f5;padding:8px;
-    text-align:center;z-index:99;border-bottom:1px solid #bbb;font-family:sans-serif}
-  .no-print button{padding:8px 20px;font-size:13px;border:none;border-radius:4px;cursor:pointer;margin:0 4px}
+  html,body{width:120mm;height:235mm;overflow:hidden;position:relative;background:#fff}
+  body{font-family:'MS Mincho','Yu Mincho',serif;color:#000}
+  .no-print{position:fixed;top:0;left:0;right:0;background:#eee;padding:6px;text-align:center;z-index:99;font-family:sans-serif;font-size:11px}
+  .no-print button{padding:5px 14px;margin:0 3px;border:none;border-radius:3px;cursor:pointer}
   @media print{.no-print{display:none}}
-
-  /* 宛先の郵便番号（上部中央） */
-  .to-zip{position:absolute;top:9mm;left:50%;transform:translateX(-50%);
-    display:flex;align-items:center;white-space:nowrap}
-
-  /* 宛先ブロック（縦書き・中央寄り） */
-  .to-block{
-    position:absolute;
-    top:32mm;
-    left:50%;
-    transform:translateX(-50%);
-    writing-mode:vertical-rl;
-    text-orientation:mixed;
-    white-space:nowrap;
-  }
-  .to-addr{font-size:11px;line-height:1.8;letter-spacing:0.05em}
-  .to-name{font-size:21px;font-weight:bold;line-height:1.5;margin-top:4mm}
-  .to-sama{font-size:16px;font-weight:normal}
-
-  /* 差出人ブロック（縦書き・右端） */
-  .from-block{
-    position:absolute;
-    bottom:12mm;
-    right:7mm;
-    writing-mode:vertical-rl;
-    text-orientation:mixed;
-    white-space:nowrap;
-    text-align:left;
-  }
-  .from-zip{display:flex;flex-direction:column;align-items:flex-start;margin-bottom:2mm}
-  .from-co{font-size:12px;font-weight:bold;line-height:1.8;letter-spacing:0.05em}
-  .from-info{font-size:9.5px;line-height:1.8;color:#222;letter-spacing:0.05em}
-</style>
-</head><body>
+</style></head><body>
 <div class="no-print">
-  <button style="background:#444;color:#fff" onclick="window.print()">🖨 封筒印刷</button>
+  <button style="background:#333;color:#fff" onclick="window.print()">🖨 印刷</button>
   <button style="background:#888;color:#fff" onclick="window.close()">閉じる</button>
-  <span style="font-size:11px;color:#666;margin-left:8px">プリンターの用紙設定：長形3号（120×235mm）縦送り</span>
+  <span style="color:#666;margin-left:6px">長形3号（120×235mm）・余白なし</span>
 </div>
 
-<!-- 宛先：郵便番号 -->
-<div class="to-zip">${makeZipBoxes(zipRaw)}</div>
+${toZipHtml}
 
 <!-- 宛先：住所・氏名（縦書き） -->
-<div class="to-block">
-  ${addr ? `<div class="to-addr">${addr}</div>` : ''}
-  <div class="to-name">${custName}<span class="to-sama">　様</span></div>
+<div style="position:absolute;top:36mm;left:6mm;right:20mm;bottom:0;
+  display:flex;flex-direction:row;justify-content:center;gap:5mm;align-items:flex-start;padding-top:4mm">
+  ${addr ? `<div style="writing-mode:vertical-rl;font-size:11px;line-height:1.9;letter-spacing:0.08em">${addr}</div>` : ''}
+  <div style="writing-mode:vertical-rl;font-size:23px;font-weight:bold;line-height:1.5;letter-spacing:0.08em;white-space:nowrap">
+    ${custName}<span style="font-size:16px;font-weight:normal">　様</span>
+  </div>
 </div>
 
-<!-- 差出人（縦書き・右下） -->
-<div class="from-block">
-  <div class="from-zip">${fromZipBoxes}</div>
-  <div class="from-info">${co.addr}</div>
-  <div class="from-co">${co.name}</div>
-  <div class="from-info">TEL ${co.tel}</div>
+<!-- 差出人（縦書き・右端） -->
+<div style="position:absolute;top:40mm;right:4mm;bottom:8mm;
+  writing-mode:vertical-rl;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end">
+  ${fromZipHtml}
+  <div style="font-size:8.5px;line-height:1.9;letter-spacing:0.05em">${co.addr}</div>
+  <div style="font-size:11px;font-weight:bold;line-height:1.9;letter-spacing:0.05em">${co.name}</div>
+  <div style="font-size:8.5px;line-height:1.9;color:#333">TEL ${co.tel}</div>
 </div>
 </body></html>`;
 
   const win = window.open('', '_blank', 'width=460,height=900');
   win.document.write(html);
   win.document.close();
+  saveDocHistory('封筒', _invOrderData?.id, _invOrderData?.工事番号, _invOrderData?.顧客?.施主名||'', '', 0);
 }
+
 
 
 
