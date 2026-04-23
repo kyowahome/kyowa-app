@@ -7238,82 +7238,91 @@ ${_printCSS(`
 
 // ===== 長3封筒印刷 =====
 function printEnvelope() {
-  const p  = _invOrderData;
+  const p        = _invOrderData;
   const custName = p.顧客?.施主名 || '';
   const zipRaw   = (p.顧客?.郵便番号||'').replace(/[^0-9]/g,'').padEnd(7,' ');
   const addr     = p.顧客?.現場住所 || '';
 
-  // 郵便番号ボックス（右+41mm、下+4mm、文字2倍32px）
-  // 現在: left=20+i*11+(i>=3?2:0), top=17mm
-  // 新: left=61+i*11+(i>=3?2:0), top=21mm
+  // ===== 仕様 =====
+  // 封筒: 120mm × 235mm 縦長、下から挿入（コード上の回転不要）
+  //
+  // 郵便番号: 中心=左66.5mm・上16mm、12pt、横書き、ゴシック体
+  //   各文字ピッチ=11mm（JIS）、3桁目と4桁目の間+2mm
+  //   → 1文字目中心=(66.5, 16), 2文字目=(77.5, 16), ...
+  //
+  // 住所: 1文字目中心=左90mm・上30mm、18pt、縦書き、ゴシック体
+  //
+  // 名前: 1文字目中心=左65mm・上50mm、24pt、縦書き、ゴシック体
+  //   様は1文字空けて続ける、文字間隔1.5倍
+
+  // 郵便番号HTML（各文字を中心基準で配置）
   const toZipHtml = zipRaw.split('').map((c, i) => {
-    const left = 61 + i * 11 + (i >= 3 ? 2 : 0);
-    return `<div style="position:absolute;left:${left}mm;top:21mm;width:8mm;height:10mm;
-      display:flex;align-items:center;justify-content:center;
-      font-family:'MS Gothic',monospace;font-size:32px;font-weight:bold;color:#000">${c.trim()}</div>`;
+    const cx = 66.5 + i * 11 + (i >= 3 ? 2 : 0); // 各文字の中心X
+    return `<div style="
+      position:absolute;
+      left:${cx}mm;
+      top:16mm;
+      transform:translate(-50%,-50%);
+      font-family:'MS Gothic','Yu Gothic','Hiragino Kaku Gothic Pro',sans-serif;
+      font-size:12pt;
+      font-weight:bold;
+      white-space:nowrap;
+      line-height:1;
+    ">${c.trim()}</div>`;
   }).join('');
 
-  // 下から給紙: body全体を180度回転
-  // 住所: 右+20mm(left=75mm)、下+10mm(top=42mm)、フォント=名前サイズ(54px)
-  // 名前: 横はOK(center)、下+10mm(top=42mm)、フォント1.5倍(54px)
+  // 住所HTML（縦書き・1文字目中心=左90mm・上30mm）
+  const addrHtml = addr ? `<div style="
+    position:absolute;
+    left:90mm;
+    top:30mm;
+    transform:translate(-50%,-50%);
+    writing-mode:vertical-rl;
+    text-orientation:mixed;
+    font-family:'MS Gothic','Yu Gothic','Hiragino Kaku Gothic Pro',sans-serif;
+    font-size:18pt;
+    line-height:1;
+    letter-spacing:0.1em;
+    white-space:nowrap;
+  ">${addr}</div>` : '';
+
+  // 名前HTML（縦書き・1文字目中心=左65mm・上50mm・文字間隔1.5倍）
+  // 「様」は1文字空けて続ける → custNameの後に全角スペース+様
+  const nameHtml = `<div style="
+    position:absolute;
+    left:65mm;
+    top:50mm;
+    transform:translate(-50%,-50%);
+    writing-mode:vertical-rl;
+    text-orientation:mixed;
+    font-family:'MS Gothic','Yu Gothic','Hiragino Kaku Gothic Pro',sans-serif;
+    font-size:24pt;
+    line-height:1;
+    letter-spacing:0.5em;
+    white-space:nowrap;
+  ">${custName}　様</div>`;
+
   const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>長3封筒</title>
 <style>
-  @page{size:120mm 235mm;margin:0}
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{width:120mm;height:235mm;overflow:hidden;position:relative;background:#fff}
-  body{
-    font-family:'MS Mincho','Yu Mincho','Hiragino Mincho Pro',serif;color:#000;
-    transform:rotate(180deg);
-    transform-origin:60mm 117.5mm;
-  }
-  .np{position:fixed;top:0;left:0;right:0;background:#eee;padding:5px;
-    text-align:center;z-index:99;font-family:sans-serif;font-size:11px;
-    transform:rotate(180deg);transform-origin:center;}
-  .np button{padding:4px 12px;margin:0 3px;border:none;border-radius:3px;cursor:pointer}
-  @media print{.np{display:none}}
+  @page { size:120mm 235mm; margin:0 }
+  * { box-sizing:border-box; margin:0; padding:0 }
+  html, body { width:120mm; height:235mm; overflow:hidden; position:relative; background:#fff }
+  .np { position:fixed; top:0; left:0; right:0; background:#eee; padding:5px;
+    text-align:center; z-index:99; font-family:sans-serif; font-size:11px }
+  .np button { padding:4px 12px; margin:0 3px; border:none; border-radius:3px; cursor:pointer }
+  @media print { .np { display:none } }
 </style></head><body>
 <div class="np">
   <button style="background:#333;color:#fff" onclick="window.print()">🖨 印刷（下から給紙）</button>
   <button style="background:#888;color:#fff" onclick="window.close()">閉じる</button>
-  <span style="color:#666;margin-left:6px">長形3号 下から給紙・余白なし</span>
+  <span style="color:#666;margin-left:6px">長3（120×235mm）縦・下から給紙</span>
 </div>
-
-<!-- 郵便番号 -->
 ${toZipHtml}
-
-<!-- 住所（右+20→left:75mm、下+10→top:42mm、フォント54px） -->
-${addr ? `<div style="
-  position:absolute;
-  left:75mm;
-  top:42mm;
-  writing-mode:vertical-rl;
-  text-orientation:mixed;
-  font-size:54px;
-  line-height:1.6;
-  letter-spacing:0.08em;
-  white-space:nowrap;
-">${addr}</div>` : ''}
-
-<!-- 氏名（横OK・下+10→top:42mm・フォント54px） -->
-<div style="
-  position:absolute;
-  top:42mm;
-  left:10mm;
-  right:35mm;
-  writing-mode:vertical-rl;
-  text-orientation:mixed;
-  display:flex;
-  justify-content:center;
-  align-items:flex-start;
-">
-  <div style="font-size:54px;font-weight:bold;line-height:1.4;letter-spacing:0.1em;white-space:nowrap">
-    ${custName}<span style="font-size:36px;font-weight:normal">　様</span>
-  </div>
-</div>
-
+${addrHtml}
+${nameHtml}
 </body></html>`;
 
-  const win = window.open('', '_blank', 'width:460,height:900');
+  const win = window.open('', '_blank', 'width=460,height=900');
   win.document.write(html);
   win.document.close();
   saveDocHistory('封筒', _invOrderData?.id, _invOrderData?.工事番号, _invOrderData?.顧客?.施主名||'', '', 0);
