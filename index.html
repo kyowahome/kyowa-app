@@ -2906,10 +2906,8 @@ function clearOrderForm() {
   }
   document.getElementById('f-category').value = '雨樋';
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('profit-preview').style.display = 'none';
-  document.getElementById('comm-preview').style.display = 'none';
-  document.getElementById('af-name').style.display = 'none';
-  document.getElementById('search-result').style.display = 'none';
+  const _s = id => { const e = document.getElementById(id); if(e) e.style.display='none'; };
+  _s('profit-preview'); _s('comm-preview'); _s('af-name'); _s('search-result');
   setSchedule(2);
 }
 
@@ -8321,45 +8319,50 @@ async function checkExistingCustomer() {
 // 見込み客から受注入力フォームへデータを引き継ぐ
 async function openOrderFromProspect(prospectId) {
   const { data: p } = await db.from('見込み客').select('*').eq('id', prospectId).single();
-  if (!p) return;
+  if (!p) { showToast('データが取得できませんでした', true); return; }
   closeModal();
 
-  // 受注入力ページへ遷移（nav強調も更新）
-  document.querySelectorAll('.page').forEach(pg => pg.classList.remove('show'));
-  document.getElementById('page-order-new').classList.add('show');
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b => {
-    if (b.textContent.includes('受注入力')) b.classList.add('active');
-  });
+  // 受注入力ページへ遷移（clearOrderFormを呼ばないようにskipClearを使用）
+  showPage('order-new', null, true);
 
-  // フォームをクリアしてから引き継ぎ
+  // 少し待ってからセット（ページ切替の描画完了を待つ）
+  await new Promise(r => setTimeout(r, 150));
+
+  // フォームをクリア（ページ表示後に実行）
   clearOrderForm();
 
-  // 顧客情報
+  // さらに少し待つ
+  await new Promise(r => setTimeout(r, 50));
+
+  // 顧客情報を引き継ぎ
   if (p.顧客id) {
     document.getElementById('f-customer-id').value = p.顧客id;
     document.getElementById('af-name').textContent = '受注実績から自動入力';
     document.getElementById('af-name').style.display = 'block';
   }
-  document.getElementById('f-name').value    = p.名前      || '';
-  document.getElementById('f-area').value    = p.エリア    || '';
-  document.getElementById('f-zip').value     = p.郵便番号  || '';
-  document.getElementById('f-addr').value    = p.住所      || '';
-  document.getElementById('f-tel').value     = p.自宅電話  || '';
-  document.getElementById('f-mobile').value  = p.携帯電話  || '';
-  document.getElementById('f-title').value   = p.工事名    || '';
-  document.getElementById('f-ins').value     = p.保険申請額 || '';
-  document.getElementById('f-date').value    = p.契約日
-    ? (p.契約日.toString().length === 5
-        ? new Date((p.契約日 - 25569) * 86400000).toISOString().split('T')[0]
-        : p.契約日)
-    : new Date().toISOString().split('T')[0];
+  document.getElementById('f-name').value   = p.名前     || '';
+  document.getElementById('f-area').value   = p.エリア   || '';
+  document.getElementById('f-zip').value    = p.郵便番号 || '';
+  document.getElementById('f-addr').value   = p.住所     || '';
+  document.getElementById('f-tel').value    = p.自宅電話 || '';
+  document.getElementById('f-mobile').value = p.携帯電話 || '';
+  document.getElementById('f-title').value  = p.工事名   || '';
+  document.getElementById('f-ins').value    = p.保険申請額 || '';
+
+  // 契約日（見込み客に登録済みなら引き継ぐ、なければ今日）
+  let contractDate = new Date().toISOString().split('T')[0];
+  if (p.契約日) {
+    contractDate = String(p.契約日).length === 5
+      ? new Date((p.契約日 - 25569) * 86400000).toISOString().split('T')[0]
+      : p.契約日;
+  }
+  document.getElementById('f-date').value = contractDate;
 
   // 既存区分
   const cnt = p.過去契約数 || 0;
   document.getElementById('f-existing').value = cnt >= 3 ? '2+' : cnt > 0 ? String(cnt) : '';
 
-  // アポ担当をセット
+  // アポ担当
   if (p.アポ担当) {
     const apoSel = document.getElementById('f-apo');
     for (const opt of apoSel.options) {
@@ -8368,7 +8371,7 @@ async function openOrderFromProspect(prospectId) {
     updateCommPreview();
   }
 
-  // 引き継ぎ元の見込み客IDを記録
+  // 引き継ぎ元IDを記録
   document.getElementById('f-prospect-id').value = prospectId;
 
   showToast(`📋 ${p.名前} さんのデータを引き継ぎました。契約金額を入力して保存してください`);
