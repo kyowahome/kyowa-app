@@ -7243,121 +7243,160 @@ function printEnvelope() {
   const zipRaw   = (p.顧客?.郵便番号||'').replace(/[^0-9]/g,'').padEnd(7,' ');
   const addr     = p.顧客?.現場住所 || '';
 
-  // =============================================
-  // 長3封筒 120mm×235mm 縦長・下から給紙
-  // 下から給紙のため印刷内容を180度回転して出力
-  //（プレビューは逆さまに見えるが印刷結果は正しい）
-  //
-  // 単位：mm / pt（1pt = 0.353mm）
+  // =========================================
+  // 長3封筒 120mm × 235mm 縦長
+  // 回転なし（下から給紙はプリンター側で設定）
   //
   // 【郵便番号】12pt・横書き・ゴシック体
-  //   グループ全体の中心: 左66.5mm・上16mm
-  //   7文字・11mmピッチ・3桁目と4桁目の間+2mm
-  //   文字位置（中心）: 32.5, 43.5, 54.5, 67.5, 78.5, 89.5, 100.5mm
+  //   1文字目中心: 左66.5mm・上16mm
+  //   ピッチ: 11mm（3桁目と4桁目の間+2mm）
   //
   // 【住所】18pt・縦書き・ゴシック体
   //   1文字目中心: 左90mm・上30mm
   //
-  // 【名前】24pt・縦書き・ゴシック体・文字間隔1.5倍
+  // 【名前】24pt・縦書き・ゴシック体・letter-spacing:0.5em
   //   1文字目中心: 左65mm・上50mm
   //   「様」は1文字空けて続ける
-  // =============================================
+  // =========================================
 
-  // 郵便番号: 7文字の中心が66.5mmになるよう配置
-  // 全体スパン: 0→68mm（6*11+2）、中心=34mm
-  // よって先頭文字位置: 66.5-34=32.5mm
-  const ZIP_CENTERS = [32.5, 43.5, 54.5, 67.5, 78.5, 89.5, 100.5];
-  // 12pt = 4.24mm → 縦方向の中心補正: 16mm - 4.24/2 = 13.88mm (top edge)
-  const zipTop = 16 - 2.12; // 文字中心が16mmになるよう上端を調整
+  // 郵便番号：各文字を中心基準で配置
+  // ※66.5mmを1文字目の中心として、そこから右に展開
+  //   7文字目: 66.5 + 6*11 + 2 = 134.5mm > 120mm
+  //   → 封筒に収めるため、グループ全体を中心66.5mmとして配置
+  //   グループスパン: 6*11+2=68mm、中心=34mm
+  //   1文字目: 66.5-34=32.5mm, 最終: 32.5+68=100.5mm
+  const ZIP_X = [32.5, 43.5, 54.5, 67.5, 78.5, 89.5, 100.5];
+  const ZIP_Y_CENTER = 16; // mm（文字中心の上端からの距離）
 
-  const toZipHtml = zipRaw.split('').map((c, i) => {
-    const cx = ZIP_CENTERS[i] !== undefined ? ZIP_CENTERS[i] : 32.5 + i*11 + (i>=3?2:0);
-    return `<div style="
+  // ptをmmに変換（1pt = 0.353mm）
+  const pt2mm = (pt) => pt * 0.353;
+  const ZIP_SIZE_MM   = pt2mm(12);   // 12pt = 4.24mm
+  const ADDR_SIZE_MM  = pt2mm(18);   // 18pt = 6.35mm
+  const NAME_SIZE_MM  = pt2mm(24);   // 24pt = 8.47mm
+
+  // 文字中心を指定位置に合わせるため、top = 中心Y - フォントサイズ/2
+  const zipTopEdge  = ZIP_Y_CENTER  - ZIP_SIZE_MM  / 2;
+  const addrTopEdge = 30            - ADDR_SIZE_MM / 2;
+  const nameTopEdge = 50            - NAME_SIZE_MM / 2;
+
+  const toZipHtml = zipRaw.split('').map((c, i) => `
+    <div style="
       position:absolute;
-      left:${cx}mm;
-      top:${zipTop.toFixed(2)}mm;
+      left:${ZIP_X[i]}mm;
+      top:${zipTopEdge.toFixed(2)}mm;
       transform:translateX(-50%);
-      font-family:'MS Gothic','Yu Gothic','Hiragino Kaku Gothic Pro',sans-serif;
+      font-family:'MS Gothic','Yu Gothic',sans-serif;
       font-size:12pt;
       font-weight:bold;
       line-height:1;
       white-space:nowrap;
-    ">${c.trim()}</div>`;
-  }).join('');
+    ">${c.trim()}</div>`).join('');
 
-  // 住所: 1文字目中心=左90mm・上30mm
-  // 18pt = 6.35mm → top補正: 30 - 6.35/2 = 26.83mm
-  const addrHtml = addr ? `<div style="
-    position:absolute;
-    left:90mm;
-    top:26.83mm;
-    transform:translateX(-50%);
-    writing-mode:vertical-rl;
-    text-orientation:mixed;
-    font-family:'MS Gothic','Yu Gothic','Hiragino Kaku Gothic Pro',sans-serif;
-    font-size:18pt;
-    line-height:1;
-    letter-spacing:0.1em;
-    white-space:nowrap;
-  ">${addr}</div>` : '';
+  const addrHtml = addr ? `
+    <div style="
+      position:absolute;
+      left:90mm;
+      top:${addrTopEdge.toFixed(2)}mm;
+      transform:translateX(-50%);
+      writing-mode:vertical-rl;
+      text-orientation:mixed;
+      font-family:'MS Gothic','Yu Gothic',sans-serif;
+      font-size:18pt;
+      line-height:1;
+      letter-spacing:0.1em;
+      white-space:nowrap;
+    ">${addr}</div>` : '';
 
-  // 名前: 1文字目中心=左65mm・上50mm
-  // 24pt = 8.47mm → top補正: 50 - 8.47/2 = 45.77mm
-  // letter-spacing:0.5em = 文字間隔1.5倍相当
-  const nameHtml = `<div style="
-    position:absolute;
-    left:65mm;
-    top:45.77mm;
-    transform:translateX(-50%);
-    writing-mode:vertical-rl;
-    text-orientation:mixed;
-    font-family:'MS Gothic','Yu Gothic','Hiragino Kaku Gothic Pro',sans-serif;
-    font-size:24pt;
-    line-height:1;
-    letter-spacing:0.5em;
-    white-space:nowrap;
-  ">${custName}　様</div>`;
+  const nameHtml = `
+    <div style="
+      position:absolute;
+      left:65mm;
+      top:${nameTopEdge.toFixed(2)}mm;
+      transform:translateX(-50%);
+      writing-mode:vertical-rl;
+      text-orientation:mixed;
+      font-family:'MS Gothic','Yu Gothic',sans-serif;
+      font-size:24pt;
+      line-height:1;
+      letter-spacing:0.5em;
+      white-space:nowrap;
+    ">${custName}　様</div>`;
 
-  // 下から給紙: 封筒コンテンツを180度回転
-  // .np（印刷ボタン）は回転外に配置
+  // グリッド線（10mmごと）デバッグ用
+  let gridHtml = '';
+  for (let y = 0; y <= 235; y += 10) {
+    const color = y % 50 === 0 ? 'rgba(255,0,0,0.3)' : 'rgba(0,0,0,0.1)';
+    gridHtml += `<div style="position:absolute;left:0;right:0;top:${y}mm;height:0.3px;background:${color}"></div>`;
+    if (y % 20 === 0) gridHtml += `<div style="position:absolute;left:1mm;top:${y+0.5}mm;font-size:7pt;color:#999;font-family:monospace">${y}</div>`;
+  }
+  for (let x = 0; x <= 120; x += 10) {
+    const color = x % 50 === 0 ? 'rgba(255,0,0,0.3)' : 'rgba(0,0,0,0.1)';
+    gridHtml += `<div style="position:absolute;top:0;bottom:0;left:${x}mm;width:0.3px;background:${color}"></div>`;
+  }
+
   const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>長3封筒</title>
 <style>
   @page { size:120mm 235mm; margin:0 }
   * { box-sizing:border-box; margin:0; padding:0 }
-  html, body { width:120mm; height:235mm; overflow:hidden; background:#fff;
-    font-family:'MS Mincho',serif; }
-  .np {
-    position:fixed; top:0; left:0; right:0; background:#eee; padding:5px;
-    text-align:center; z-index:99; font-family:sans-serif; font-size:11px;
-  }
-  .np button { padding:4px 12px; margin:0 3px; border:none; border-radius:3px; cursor:pointer }
-  @media print { .np { display:none } }
-  /* 下から給紙: コンテンツを180度回転 */
-  .envelope-content {
-    position:absolute;
+  html { width:120mm; height:235mm }
+  body {
     width:120mm;
     height:235mm;
-    top:0; left:0;
-    transform:rotate(180deg);
-    transform-origin:60mm 117.5mm;
+    overflow:hidden;
+    position:relative;
+    background:#fff;
+    border:0.5px solid #ccc;
+  }
+  .ctrl {
+    position:fixed;
+    bottom:0;
+    left:0;
+    right:0;
+    background:rgba(240,240,240,0.95);
+    padding:6px;
+    text-align:center;
+    z-index:99;
+    font-family:sans-serif;
+    font-size:11px;
+    border-top:1px solid #bbb;
+  }
+  .ctrl button {
+    padding:4px 14px;
+    margin:0 3px;
+    border:none;
+    border-radius:3px;
+    cursor:pointer;
+  }
+  @media print {
+    .ctrl { display:none }
+    body { border:none }
   }
 </style></head><body>
 
-<div class="np">
-  <button style="background:#333;color:#fff" onclick="window.print()">🖨 印刷（下から給紙）</button>
-  <button style="background:#888;color:#fff" onclick="window.close()">閉じる</button>
-  <span style="color:#c00;margin-left:6px;font-weight:bold">※プレビューは逆さま表示が正常（下から給紙のため）</span>
+<!-- グリッド（確認用・印刷では薄く表示） -->
+<div style="position:absolute;inset:0;pointer-events:none;opacity:0.4">
+  ${gridHtml}
 </div>
 
-<div class="envelope-content">
-  ${toZipHtml}
-  ${addrHtml}
-  ${nameHtml}
+<!-- 郵便番号 -->
+${toZipHtml}
+
+<!-- 住所 -->
+${addrHtml}
+
+<!-- 名前 -->
+${nameHtml}
+
+<div class="ctrl">
+  <button style="background:#333;color:#fff" onclick="document.querySelector('.ctrl').style.display='none';setTimeout(()=>{window.print();document.querySelector('.ctrl').style.display='';},100)">🖨 印刷（グリッド付き）</button>
+  <button style="background:#1976d2;color:#fff" onclick="document.querySelectorAll('[style*=opacity]').forEach(e=>e.style.opacity='0');document.querySelector('.ctrl').style.display='none';setTimeout(()=>{window.print();document.querySelectorAll('[style*=opacity]').forEach(e=>e.style.opacity='0.4');document.querySelector('.ctrl').style.display='';},100)">🖨 印刷（グリッドなし）</button>
+  <button style="background:#888;color:#fff" onclick="window.close()">閉じる</button>
+  <span style="color:#c00;margin-left:8px">グリッド線=10mm間隔（赤=50mm）</span>
 </div>
 
 </body></html>`;
 
-  const win = window.open('', '_blank', 'width=460,height=900');
+  const win = window.open('', '_blank', 'width=480,height=940');
   win.document.write(html);
   win.document.close();
   saveDocHistory('封筒', _invOrderData?.id, _invOrderData?.工事番号, _invOrderData?.顧客?.施主名||'', '', 0);
