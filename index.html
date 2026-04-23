@@ -261,9 +261,9 @@
       <div class="card" style="margin-bottom:12px">
         <div class="card-title" style="margin-bottom:8px">
           月別契約金額（今年 vs 昨年）
-          <span style="font-size:11px;color:var(--text-hint);font-weight:400">百万円　※今月バーをクリックで受注一覧へ</span>
+          <span style="font-size:11px;color:var(--text-hint);font-weight:400">百万円　※今年の月をクリックで受注一覧へ</span>
         </div>
-        <div style="position:relative;height:220px">
+        <div style="position:relative;height:110px">
           <canvas id="chart-monthly"></canvas>
         </div>
         <div id="chart-monthly-totals" style="display:flex;gap:16px;margin-top:6px;font-size:11px;color:var(--text-sub);padding-left:8px"></div>
@@ -2521,8 +2521,11 @@ async function loadDashboard() {
   // グラフと並列実行 → グラフを待たせない
   loadUnpaidKpi(); // awaitしない
 
-  // ===== 月別契約金額グラフ =====
+  // ===== 月別契約金額グラフ（横向き積み上げ） =====
+  // 上=今年 / 下=昨年、各棒を1月〜12月で左から積み上げ
   const months = Array.from({length:12}, (_,i) => i+1);
+  const toM = (v) => Math.round(v / 10000) / 100;
+
   const thisMonthly = months.map(m => {
     const mStr = String(m).padStart(2,'0');
     return cases.filter(c => c.契約日?.startsWith(`${thisY}-${mStr}`))
@@ -2534,52 +2537,78 @@ async function loadDashboard() {
       .reduce((s,c) => s + Number(c.契約金額||0), 0);
   });
 
-  const monthLabels = months.map(m => m + '月');
-  const toM = (v) => Math.round(v / 10000) / 100; // 円→百万円
-
-  // 今月の詳細テキスト
-  const thisMonthAmt = thisMonthly[thisM-1];
   const totalThis = thisMonthly.reduce((s,v)=>s+v,0);
   const totalLast = lastMonthly.reduce((s,v)=>s+v,0);
+  const thisMonthAmt = thisMonthly[thisM-1];
   document.getElementById('chart-monthly-totals').innerHTML =
     `<span>今年合計: <b>¥${Math.round(totalThis/10000).toLocaleString()}万</b></span>
-     <span>昨年合計: <b>¥${Math.round(totalLast/10000).toLocaleString()}万</b></span>
-     <span>今月(${thisM}月): <b>¥${thisMonthAmt.toLocaleString()}円</b></span>`;
+     <span style="margin-left:12px">昨年合計: <b>¥${Math.round(totalLast/10000).toLocaleString()}万</b></span>
+     <span style="margin-left:12px">今月(${thisM}月): <b>¥${thisMonthAmt.toLocaleString()}円</b></span>`;
 
-  // 今年の各月の背景色（今月だけ強調）
-  const thisBarColors = months.map(m =>
-    m === thisM ? '#e65100' : '#1565c0'
-  );
+  // 月ごとの色（青系グラデーション。今月だけ赤）
+  const MONTH_COLORS = [
+    '#bbdefb','#90caf9','#64b5f6','#42a5f5','#2196f3','#1e88e5',
+    '#1976d2','#1565c0','#0d47a1','#1a237e','#283593','#3949ab',
+  ];
 
-  _buildChart('chart-monthly', 'bar', {
-    labels: monthLabels,
-    datasets: [
-      {
-        label: `今年(${thisY})`,
-        data: thisMonthly.map(toM),
-        backgroundColor: thisBarColors,
-        order: 1,
+  // 各月を1データセット（今年・昨年 2本分）
+  const monthDatasets = months.map((m, mi) => ({
+    label: `${m}月`,
+    // indexAxis:'y' なので data=[昨年の値, 今年の値]（上が今年、下が昨年）
+    data: [toM(lastMonthly[mi]), toM(thisMonthly[mi])],
+    backgroundColor: m === thisM ? '#e65100' : MONTH_COLORS[mi],
+    borderWidth: 0,
+    stack: 'stack',
+    barThickness: 36,
+  }));
+
+  if (_charts['chart-monthly']) { _charts['chart-monthly'].destroy(); delete _charts['chart-monthly']; }
+  const ctxM = document.getElementById('chart-monthly');
+  if (ctxM) {
+    _charts['chart-monthly'] = new Chart(ctxM, {
+      type: 'bar',
+      data: {
+        labels: [`昨年(${lastY})`, `今年(${thisY})`],
+        datasets: monthDatasets,
       },
-      {
-        label: `昨年(${lastY})`,
-        data: lastMonthly.map(toM),
-        backgroundColor: 'rgba(120,144,156,0.5)',
-        borderColor: 'rgba(120,144,156,0.8)',
-        borderWidth: 1,
-        order: 2,
+      options: {
+        indexAxis: 'y',   // ← 横向き棒グラフ
+        responsive: true,
+        maintainAspectRatio: false,
+        onClick: (e, els) => {
+          if (!els.length) return;
+          const dsIdx = els[0].datasetIndex; // 月index(0=1月)
+          const barIdx = els[0].index;       // 0=昨年, 1=今年
+          if (barIdx === 1) _jumpToMonthOrders(thisY, months[dsIdx]);
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: 'index',
+            callbacks: {
+              title: (items) => `${items[0].label} ${items[0].dataset.label}`,
+              label: (ctx) => ` ${ctx.raw.toFixed(1)}百万円`,
+              footer: (items) => {
+                const total = items.reduce((s, i) => s + Number(i.raw), 0);
+                return `合計: ${total.toFixed(1)}百万円`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            stacked: true,
+            ticks: { callback: v => v + 'M', font: { size: 10 } },
+            grid: { color: 'rgba(0,0,0,0.08)' },
+          },
+          y: {
+            stacked: true,
+            ticks: { font: { size: 13, weight: 'bold' } },
+          },
+        },
       },
-    ],
-  }, {
-    onClick: (e, els) => {
-      if (!els.length) return;
-      const idx = els[0].index;
-      const m = months[idx];
-      _jumpToMonthOrders(thisY, m);
-    },
-    scales: {
-      y: { ticks: { callback: v => v + 'M' } },
-    },
-  });
+    });
+  }
 
   // ===== 担当別契約額グラフ =====
   const STAFF_AMT = ['守','武田','大石','引地','板垣','後藤'];
@@ -7158,74 +7187,65 @@ ${_printCSS(`
 // ===== 長3封筒印刷 =====
 function printEnvelope() {
   const p  = _invOrderData;
-  const co = INVOICE_COMPANIES[document.getElementById('inv-branch').value];
   const custName = p.顧客?.施主名 || '';
   const zipRaw   = (p.顧客?.郵便番号||'').replace(/[^0-9]/g,'').padEnd(7,' ');
   const addr     = p.顧客?.現場住所 || '';
-  const fromZip  = (co.zip||'').replace(/[^0-9]/g,'').padEnd(7,' ');
 
-  // JIS X 6228 長3封筒(120×235mm) 宛先郵便番号枠
-  // 上辺から22mm、左辺から20mm、各マス8×8mm、間隔3mm、3桁目後に2mm追加
+  // 封筒を横向きで使用（長辺が水平：235mm×120mm）
+  // 郵便番号枠は封筒に印刷済み（上部中央）
+  // 印字するのは住所と氏名のみ
+
+  // 横向き封筒（@page size: 235mm 120mm）
+  // 郵便番号枠の位置（封筒の印刷枠に合わせて印字）
+  // 枠は上端から約10mm、中央付近（235mmの中央=117.5mm）から左右に広がる
+  // 3+4桁、各マス8×8mm、間隔3mm、3-4桁間+2mm
+  // 全体幅: 8*7 + 3*6 + 2 = 56+18+2 = 76mm → 中央: (235-76)/2 = 79.5mm から開始
+  const zipLeft = 79.5;
   const toZipHtml = zipRaw.split('').map((c, i) => {
-    const left = 20 + i * 11 + (i >= 3 ? 2 : 0);
-    return `<div style="position:absolute;left:${left}mm;top:22mm;width:8mm;height:8mm;
-      border:1px solid #e00;display:flex;align-items:center;justify-content:center;
-      font-family:'MS Gothic',monospace;font-size:13px;font-weight:bold;color:#000">${c.trim()}</div>`;
+    const left = zipLeft + i * 11 + (i >= 3 ? 2 : 0);
+    return `<div style="position:absolute;left:${left}mm;top:8mm;width:8mm;height:8mm;
+      border:1.5px solid #e00;display:flex;align-items:center;justify-content:center;
+      font-family:'MS Gothic',monospace;font-size:14px;font-weight:bold;color:#000">${c.trim()}</div>`;
   }).join('');
 
-  // 差出人郵便番号（小枠）
-  const fromZipHtml = '<div style="display:flex;margin-bottom:1.5mm">' +
-    fromZip.split('').map((c, i) =>
-      `<div style="width:4.5mm;height:5mm;border:0.8px solid #555;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:8px">${c.trim()}</div>` +
-      (i === 2 ? '<div style="width:1.5mm"></div>' : '')
-    ).join('') + '</div>';
-
+  // 住所・氏名：縦書きで封筒中央に大きく
   const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>長3封筒</title>
 <style>
-  @page{size:120mm 235mm;margin:0}
+  @page{size:235mm 120mm;margin:0}
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{width:120mm;height:235mm;overflow:hidden;position:relative;background:#fff}
-  body{font-family:'MS Mincho','Yu Mincho',serif;color:#000}
-  .no-print{position:fixed;top:0;left:0;right:0;background:#eee;padding:6px;text-align:center;z-index:99;font-family:sans-serif;font-size:11px}
-  .no-print button{padding:5px 14px;margin:0 3px;border:none;border-radius:3px;cursor:pointer}
-  @media print{.no-print{display:none}}
+  html,body{width:235mm;height:120mm;overflow:hidden;position:relative;background:#fff}
+  body{font-family:'MS Mincho','Yu Mincho','Hiragino Mincho Pro',serif;color:#000}
+  .np{position:fixed;top:0;left:0;right:0;background:#eee;padding:5px;text-align:center;z-index:99;font-family:sans-serif;font-size:11px}
+  .np button{padding:4px 12px;margin:0 3px;border:none;border-radius:3px;cursor:pointer}
+  @media print{.np{display:none}}
 </style></head><body>
-<div class="no-print">
+<div class="np">
   <button style="background:#333;color:#fff" onclick="window.print()">🖨 印刷</button>
   <button style="background:#888;color:#fff" onclick="window.close()">閉じる</button>
-  <span style="color:#666;margin-left:6px">長形3号（120×235mm）・余白なし</span>
+  <span style="color:#666;margin-left:6px">長形3号 横向き（235×120mm）・余白なし</span>
 </div>
 
+<!-- 郵便番号（枠に合わせた印字） -->
 ${toZipHtml}
 
-<!-- 宛先：住所・氏名（縦書き） -->
-<div style="position:absolute;top:36mm;left:6mm;right:20mm;bottom:0;
-  display:flex;flex-direction:row;justify-content:center;gap:5mm;align-items:flex-start;padding-top:4mm">
-  ${addr ? `<div style="writing-mode:vertical-rl;font-size:11px;line-height:1.9;letter-spacing:0.08em">${addr}</div>` : ''}
-  <div style="writing-mode:vertical-rl;font-size:23px;font-weight:bold;line-height:1.5;letter-spacing:0.08em;white-space:nowrap">
-    ${custName}<span style="font-size:16px;font-weight:normal">　様</span>
+<!-- 住所・氏名（縦書き・右寄り・大きく） -->
+<div style="position:absolute;top:20mm;left:50mm;right:10mm;bottom:8mm;
+  display:flex;flex-direction:row;justify-content:center;align-items:center;gap:8mm">
+  ${addr ? `<div style="writing-mode:vertical-rl;text-orientation:mixed;
+    font-size:15px;line-height:2;letter-spacing:0.12em;white-space:nowrap">${addr}</div>` : ''}
+  <div style="writing-mode:vertical-rl;text-orientation:mixed;
+    font-size:30px;font-weight:bold;line-height:1.4;letter-spacing:0.1em;white-space:nowrap">
+    ${custName}<span style="font-size:22px;font-weight:normal">　様</span>
   </div>
 </div>
 
-<!-- 差出人（縦書き・右端） -->
-<div style="position:absolute;top:40mm;right:4mm;bottom:8mm;
-  writing-mode:vertical-rl;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end">
-  ${fromZipHtml}
-  <div style="font-size:8.5px;line-height:1.9;letter-spacing:0.05em">${co.addr}</div>
-  <div style="font-size:11px;font-weight:bold;line-height:1.9;letter-spacing:0.05em">${co.name}</div>
-  <div style="font-size:8.5px;line-height:1.9;color:#333">TEL ${co.tel}</div>
-</div>
 </body></html>`;
 
-  const win = window.open('', '_blank', 'width=460,height=900');
+  const win = window.open('', '_blank', 'width=900,height=480');
   win.document.write(html);
   win.document.close();
   saveDocHistory('封筒', _invOrderData?.id, _invOrderData?.工事番号, _invOrderData?.顧客?.施主名||'', '', 0);
 }
-
-
-
-
 function onZipInput(val) {
   const digits = val.replace(/[^0-9]/g, '');
   if (digits.length > 3) {
