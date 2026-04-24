@@ -1895,6 +1895,24 @@
         <div id="folder-url-progress" style="font-size:12px;color:var(--blue);font-weight:600"></div>
       </div>
 
+      <!-- 顧客フラグ一括設定 -->
+      <div class="card" id="bulk-flag-card" style="display:none">
+        <div class="card-title">
+          🚩 顧客フラグ一括設定
+          <div style="display:flex;gap:6px">
+            <button class="btn sm" onclick="loadBulkFlagList()">🔍 対象を検索</button>
+            <button class="btn sm" onclick="document.getElementById('bulk-flag-card').style.display='none'">閉じる</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:8px">
+          名前に「H」が付く顧客を自動検出します。個別に編集してから一括保存できます。
+        </div>
+        <div id="bulk-flag-list"></div>
+        <div id="bulk-flag-footer" style="display:none;margin-top:10px;text-align:right">
+          <button class="btn sm primary" onclick="saveBulkFlags()">💾 チェックした顧客に一括保存</button>
+        </div>
+      </div>
+
       <!-- 年賀状CSVエクスポート -->
       <div class="card">
         <div class="card-title">
@@ -3023,6 +3041,134 @@ async function saveFlagEditor(custId) {
   if (typeof openOrder === 'function' && currentOrderId) {
     setTimeout(() => openOrder(currentOrderId), 300);
   }
+}
+
+// ===== 顧客フラグ一括設定 =====
+let _bulkFlagData = []; // { id, 施主名, エリア, 顧客フラグ, フラグメモ, selected }
+
+async function loadBulkFlagList() {
+  const listEl = document.getElementById('bulk-flag-list');
+  listEl.innerHTML = '<div class="loading">検索中...</div>';
+
+  // 全顧客を取得（ページング対応）
+  let allCustomers = [];
+  const pageSize = 1000;
+  let from = 0;
+  while (true) {
+    const { data, error } = await db.from('顧客')
+      .select('id,施主名,エリア,顧客フラグ,フラグメモ')
+      .range(from, from + pageSize - 1);
+    if (error || !data || data.length === 0) break;
+    allCustomers = allCustomers.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  // H付き または既にフラグあり の顧客を抽出
+  _bulkFlagData = allCustomers
+    .filter(c => detectHPrefix(c.施主名) || c.顧客フラグ)
+    .map(c => ({
+      ...c,
+      // H付きでフラグ未設定→郵便不達を初期提案
+      _suggestedFlag: !c.顧客フラグ && detectHPrefix(c.施主名) ? '郵便不達' : (c.顧客フラグ || ''),
+      _memo: c.フラグメモ || '',
+      _checked: !c.顧客フラグ && detectHPrefix(c.施主名), // 未設定のH付きを初期チェック
+    }));
+
+  if (_bulkFlagData.length === 0) {
+    listEl.innerHTML = '<div style="color:var(--text-hint);font-size:13px;padding:8px">対象顧客は見つかりませんでした</div>';
+    document.getElementById('bulk-flag-footer').style.display = 'none';
+    return;
+  }
+
+  renderBulkFlagList();
+  document.getElementById('bulk-flag-footer').style.display = '';
+}
+
+function renderBulkFlagList() {
+  const listEl = document.getElementById('bulk-flag-list');
+  const hNew   = _bulkFlagData.filter(c => !c.顧客フラグ && detectHPrefix(c.施主名));
+  const hExist = _bulkFlagData.filter(c => c.顧客フラグ);
+
+  const renderRow = (c, i) => {
+    const globalIdx = _bulkFlagData.indexOf(c);
+    const flagOptions = CUSTOMER_FLAGS.map(f => {
+      const sel = c._suggestedFlag && c._suggestedFlag.includes(f.key) ? 'selected' : '';
+      return `<option value="${f.key}" ${sel}>${f.icon} ${f.key}</option>`;
+    }).join('');
+    const hBadge = detectHPrefix(c.施主名)
+      ? `<span style="font-size:10px;background:#fff3e0;color:#f57c00;padding:1px 4px;border-radius:3px;margin-left:4px">H付き</span>` : '';
+    return `<tr style="font-size:12px">
+      <td style="padding:4px 6px">
+        <input type="checkbox" ${c._checked ? 'checked' : ''} onchange="_bulkFlagData[${globalIdx}]._checked=this.checked">
+      </td>
+      <td style="padding:4px 6px;font-weight:600">${c.施主名||'—'}${hBadge}</td>
+      <td style="padding:4px 6px;color:var(--text-sub)">${c.エリア||'—'}</td>
+      <td style="padding:4px 6px">
+        <select onchange="_bulkFlagData[${globalIdx}]._suggestedFlag=this.value"
+          style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px">
+          <option value="">-- なし --</option>
+          ${flagOptions}
+        </select>
+      </td>
+      <td style="padding:4px 6px">
+        <input type="text" value="${c._memo}" placeholder="メモ（任意）"
+          oninput="_bulkFlagData[${globalIdx}]._memo=this.value"
+          style="width:150px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px">
+      </td>
+    </tr>`;
+  };
+
+  let html = '';
+  if (hNew.length > 0) {
+    html += `<div style="font-size:12px;font-weight:700;color:#f57c00;margin:8px 0 4px">
+      📮 H付き（フラグ未設定）${hNew.length}件
+      <button class="btn sm" style="font-size:10px;margin-left:8px" onclick="bulkCheckAll(true)">全チェック</button>
+      <button class="btn sm" style="font-size:10px" onclick="bulkCheckAll(false)">全解除</button>
+    </div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="font-size:11px;color:var(--text-hint)">
+        <th style="padding:2px 6px">✓</th><th>施主名</th><th>エリア</th><th>フラグ</th><th>メモ</th>
+      </tr></thead><tbody>
+      ${hNew.map(c => renderRow(c)).join('')}
+    </tbody></table>`;
+  }
+  if (hExist.length > 0) {
+    html += `<div style="font-size:12px;font-weight:700;color:var(--text-sub);margin:12px 0 4px">
+      🚩 既にフラグあり ${hExist.length}件（内容確認・修正可）</div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="font-size:11px;color:var(--text-hint)">
+        <th style="padding:2px 6px">✓</th><th>施主名</th><th>エリア</th><th>フラグ</th><th>メモ</th>
+      </tr></thead><tbody>
+      ${hExist.map(c => renderRow(c)).join('')}
+    </tbody></table>`;
+  }
+
+  listEl.innerHTML = html;
+}
+
+function bulkCheckAll(checked) {
+  _bulkFlagData.forEach((c, i) => {
+    if (!c.顧客フラグ && detectHPrefix(c.施主名)) _bulkFlagData[i]._checked = checked;
+  });
+  renderBulkFlagList();
+}
+
+async function saveBulkFlags() {
+  const targets = _bulkFlagData.filter(c => c._checked);
+  if (targets.length === 0) { showToast('チェックされた顧客がありません', true); return; }
+  if (!confirm(`${targets.length}件の顧客フラグを保存します。よろしいですか？`)) return;
+
+  let success = 0, err = 0;
+  for (const c of targets) {
+    const { error } = await db.from('顧客').update({
+      顧客フラグ: c._suggestedFlag || null,
+      フラグメモ: c._memo || null,
+    }).eq('id', c.id);
+    if (error) err++; else success++;
+  }
+  showToast(`✅ ${success}件保存完了${err > 0 ? '　⚠️ ' + err + '件エラー' : ''}`);
+  if (success > 0) loadBulkFlagList(); // リストを更新
 }
 
 // ===== 年賀状CSVエクスポート =====
@@ -6674,9 +6820,10 @@ async function loadMaster() {
 
   // フォルダURL一括登録カード（管理者のみ表示）
   const folderCard = document.getElementById('folder-url-card');
-  if (folderCard) {
-    folderCard.style.display = isAdmin() ? '' : 'none';
-  }
+  if (folderCard) folderCard.style.display = isAdmin() ? '' : 'none';
+  // 顧客フラグ一括設定カード（管理者のみ表示）
+  const bulkFlagCard = document.getElementById('bulk-flag-card');
+  if (bulkFlagCard) bulkFlagCard.style.display = isAdmin() ? '' : 'none';
 }
 
 // ===== ダッシュボードKPI（入金一覧と同じ計算） =====
