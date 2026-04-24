@@ -809,7 +809,13 @@
             </div>
             <div class="field">
               <label>施主名</label>
-              <input type="text" id="od-name" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px" readonly style="background:var(--surface2)">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span id="od-flag-icons" style="font-size:14px"></span>
+                <input type="text" id="od-name" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px" readonly>
+                <button id="od-flag-btn" class="btn sm" onclick="openFlagEditor(window._currentCustId, document.getElementById('od-name').value, window._currentCustFlag, window._currentCustFlagMemo)"
+                  style="display:none;white-space:nowrap;font-size:11px">🚩 フラグ</button>
+              </div>
+              <div id="od-flag-banner" style="display:none;margin-top:6px;padding:6px 10px;border-radius:5px;font-size:12px;font-weight:600"></div>
             </div>
             <div class="field">
               <label>エリア</label>
@@ -1889,6 +1895,18 @@
         <div id="folder-url-progress" style="font-size:12px;color:var(--blue);font-weight:600"></div>
       </div>
 
+      <!-- 年賀状CSVエクスポート -->
+      <div class="card">
+        <div class="card-title">
+          🎍 年賀状CSVエクスポート
+          <button class="btn sm primary" onclick="exportNengajoCSV()">📥 CSVダウンロード</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-hint)">
+          郵便不達・転居・逝去フラグの顧客、および名前に「H」が付く顧客を自動除外します。<br>
+          出力項目：郵便番号・住所・氏名（宛名印刷ソフト取込用）
+        </div>
+      </div>
+
       <!-- 書類発行履歴 -->
       <div class="card" id="doc-history-master-card">
         <div class="card-title">
@@ -2927,6 +2945,118 @@ function clearOrderForm() {
   setSchedule(2);
 }
 
+// ===== 顧客フラグ =====
+const CUSTOMER_FLAGS = [
+  { key: '要注意',  icon: '⚠️', color: '#e53935', bg: '#ffebee' },
+  { key: '郵便不達', icon: '📮', color: '#f57c00', bg: '#fff3e0' },
+  { key: '転居',   icon: '🏠', color: '#757575', bg: '#f5f5f5' },
+  { key: '逝去',   icon: '🕯️', color: '#283593', bg: '#e8eaf6' },
+  { key: '連絡不可', icon: '🔕', color: '#f9a825', bg: '#fffde7' },
+];
+const FLAG_EXCLUDE_MAIL = ['郵便不達', '転居', '逝去']; // 封書・年賀状CSVから除外
+
+// フラグ文字列→アイコンHTML
+function flagIcons(flagStr) {
+  if (!flagStr) return '';
+  const flags = flagStr.split(',').map(f => f.trim());
+  return CUSTOMER_FLAGS.filter(f => flags.includes(f.key))
+    .map(f => `<span title="${f.key}" style="font-size:13px">${f.icon}</span>`).join('');
+}
+
+// 封書・郵便系から除外すべき顧客か
+function isMailExcluded(flagStr) {
+  if (!flagStr) return false;
+  return FLAG_EXCLUDE_MAIL.some(f => flagStr.includes(f));
+}
+
+// 名前の先頭「H」「Ｈ」を検出して郵便不達フラグを提案
+function detectHPrefix(name) {
+  return /^[HＨ]/.test(name ? name.trim() : '');
+}
+
+// 顧客フラグ編集ダイアログ（管理者のみ）
+async function openFlagEditor(custId, custName, currentFlag, currentMemo) {
+  if (!isAdmin()) return;
+  const flags = (currentFlag || '').split(',').map(f => f.trim()).filter(Boolean);
+  const hDetected = detectHPrefix(custName);
+
+  const checkboxes = CUSTOMER_FLAGS.map(f => {
+    const checked = flags.includes(f.key) || (hDetected && f.key === '郵便不達' && !currentFlag) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:${flags.includes(f.key)?f.bg:'transparent'};border-radius:5px;cursor:pointer">
+      <input type="checkbox" value="${f.key}" ${checked} style="width:16px;height:16px"> ${f.icon} ${f.key}
+    </label>`;
+  }).join('');
+
+  const hint = hDetected && !currentFlag
+    ? `<div style="font-size:11px;color:#f57c00;margin-bottom:8px">⚠️ 名前に「H」が付いています。郵便不達を自動選択しました。</div>` : '';
+
+  const html = `
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center" id="flag-overlay">
+      <div style="background:#fff;border-radius:10px;padding:20px;width:320px;box-shadow:0 8px 32px rgba(0,0,0,.25)">
+        <div style="font-weight:700;font-size:15px;margin-bottom:12px">🚩 顧客フラグ設定</div>
+        <div style="font-size:13px;color:var(--text-sub);margin-bottom:10px">${custName}</div>
+        ${hint}
+        <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px" id="flag-checks">${checkboxes}</div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:12px;color:var(--text-sub)">メモ（理由・詳細）</label>
+          <textarea id="flag-memo-input" rows="2" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;resize:vertical;box-sizing:border-box">${currentMemo||''}</textarea>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn sm" onclick="document.getElementById('flag-overlay').remove()">キャンセル</button>
+          <button class="btn sm primary" onclick="saveFlagEditor(${custId})">💾 保存</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function saveFlagEditor(custId) {
+  const checks = [...document.querySelectorAll('#flag-checks input:checked')];
+  const newFlag = checks.map(c => c.value).join(',') || null;
+  const newMemo = document.getElementById('flag-memo-input').value.trim() || null;
+  const { error } = await db.from('顧客').update({ 顧客フラグ: newFlag, フラグメモ: newMemo }).eq('id', custId);
+  if (error) { showToast('保存失敗: ' + error.message, true); return; }
+  document.getElementById('flag-overlay').remove();
+  showToast('フラグを保存しました');
+  // 受注一覧・詳細を更新
+  if (typeof loadOrderList === 'function') loadOrderList(false);
+  if (typeof openOrder === 'function' && currentOrderId) {
+    setTimeout(() => openOrder(currentOrderId), 300);
+  }
+}
+
+// ===== 年賀状CSVエクスポート =====
+async function exportNengajoCSV() {
+  showToast('年賀状CSV作成中...');
+  // 工事案件の顧客IDを全件取得（重複なし・フラグ除外）
+  const { data: orders } = await db.from('工事案件')
+    .select('顧客id,顧客(施主名,郵便番号,現場住所,顧客フラグ)')
+    .neq('ステータス', '失注');
+
+  const seen = new Set();
+  const rows = [['郵便番号', '住所', '氏名']];
+  (orders || []).forEach(o => {
+    const c = o.顧客;
+    if (!c || !c.施主名) return;
+    if (isMailExcluded(c.顧客フラグ)) return;
+    if (detectHPrefix(c.施主名)) return; // H付きも除外
+    const key = c.郵便番号 + c.現場住所 + c.施主名;
+    if (seen.has(key)) return;
+    seen.add(key);
+    // 施主名の先頭H/Ｈを除去（念のため）
+    const name = (c.施主名 || '').replace(/^[HＨ]/, '');
+    rows.push([c.郵便番号 || '', c.現場住所 || '', name]);
+  });
+
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = '年賀状_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click(); URL.revokeObjectURL(url);
+  showToast(`✅ 年賀状CSV ${rows.length - 1}件をエクスポートしました`);
+}
+
 // ===== 住所正規化（「字」「大字」を除去して検索精度を上げる）=====
 function normalizeAddr(str) {
   if (!str) return str;
@@ -3316,7 +3446,7 @@ async function loadOrderList(reset = true) {
 
   // 工事案件検索
   let query = db.from('工事案件')
-    .select('id,工事番号,工事名,契約日,契約金額,社内仕切税抜,ステータス,顧客id,アポ担当名,クローザー名,支店,工事種類,備考,フォルダURL,顧客(施主名)', { count: 'exact' })
+    .select('id,工事番号,工事名,契約日,契約金額,社内仕切税抜,ステータス,顧客id,アポ担当名,クローザー名,支店,工事種類,備考,フォルダURL,顧客(施主名,顧客フラグ)', { count: 'exact' })
     .order(orderSortCol === '施主名' ? '顧客id' : orderSortCol, { ascending: orderSortAsc })
     .range(from, to);
   if (status)   query = query.eq('ステータス', status);
@@ -3515,17 +3645,17 @@ async function loadOrderList(reset = true) {
     const stColor = statusColor(p.ステータス);
     return `<tr onclick="${p.顧客id ? 'openCustomerOrders('+p.顧客id+','+p.id+')' : 'openOrder('+p.id+')'}" style="cursor:pointer">
       <td style="font-family:monospace;font-size:11px;white-space:nowrap">${p.工事番号||'—'}</td>
-      <td style="font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-        ${p.フォルダURL
-          ? `<span style="display:flex;align-items:center;gap:3px">
-              <span>${(p.顧客?.施主名||'').trim() || cust.施主名 || '—'}</span>
-              <button onclick="event.stopPropagation();copyFolderPath(this.dataset.url)"
+      <td style="font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <span style="display:inline-flex;align-items:center;gap:2px;max-width:100%">
+          ${flagIcons(p.顧客?.顧客フラグ || (detectHPrefix((p.顧客?.施主名||'').trim()||cust.施主名||'') ? '郵便不達' : ''))}
+          <span style="overflow:hidden;text-overflow:ellipsis">${(p.顧客?.施主名||'').trim() || cust.施主名 || '—'}</span>
+          ${p.フォルダURL
+            ? `<button onclick="event.stopPropagation();copyFolderPath(this.dataset.url)"
                 data-url="${p.フォルダURL.replace(/"/g,'&quot;')}"
-                title="フォルダパスをコピー（エクスプローラーに貼り付けて開く）"
-                style="padding:1px 4px;font-size:10px;background:var(--blue);color:#fff;border:none;border-radius:3px;cursor:pointer;flex-shrink:0">📁</button>
-            </span>`
-          : ((p.顧客?.施主名||'').trim() || cust.施主名 || '—')
-        }
+                title="フォルダパスをコピー"
+                style="padding:1px 4px;font-size:10px;background:var(--blue);color:#fff;border:none;border-radius:3px;cursor:pointer;flex-shrink:0">📁</button>`
+            : ''}
+        </span>
       </td>
       <td style="font-size:11px;color:var(--text-sub)">${cust.エリア||'—'}</td>
       <td>${p.工事名||'—'}</td>
@@ -3674,9 +3804,37 @@ async function openOrderNew() {
 async function openOrder(id) {
   currentOrderId = id;
   const { data: p } = await db.from('工事案件')
-    .select('*, 顧客(施主名,エリア,郵便番号,現場住所,自宅電話,携帯電話)')
+    .select('*, 顧客(施主名,エリア,郵便番号,現場住所,自宅電話,携帯電話,顧客フラグ,フラグメモ)')
     .eq('id', id).single();
   if (!p) return;
+
+  // 顧客フラグをwindow変数に保存（フラグ編集ダイアログ用）
+  window._currentCustId       = p.顧客id;
+  window._currentCustFlag     = p.顧客?.顧客フラグ || null;
+  window._currentCustFlagMemo = p.顧客?.フラグメモ || null;
+
+  // フラグアイコン・バナー表示
+  const flagStr = p.顧客?.顧客フラグ || (detectHPrefix(p.顧客?.施主名||'') ? '郵便不達' : null);
+  const flagIconEl  = document.getElementById('od-flag-icons');
+  const flagBanner  = document.getElementById('od-flag-banner');
+  const flagBtn     = document.getElementById('od-flag-btn');
+  if (flagIconEl) flagIconEl.innerHTML = flagIcons(flagStr);
+  if (flagBtn)    flagBtn.style.display = isAdmin() ? '' : 'none';
+  if (flagBanner) {
+    if (flagStr) {
+      const flags = flagStr.split(',').map(f=>f.trim());
+      const defs  = CUSTOMER_FLAGS.filter(f => flags.includes(f.key));
+      const mainFlag = defs[0];
+      flagBanner.style.display = '';
+      flagBanner.style.background = mainFlag ? mainFlag.bg : '#fff3e0';
+      flagBanner.style.color      = mainFlag ? mainFlag.color : '#e65100';
+      flagBanner.innerHTML =
+        defs.map(f=>`${f.icon} ${f.key}`).join('　') +
+        (p.顧客?.フラグメモ ? `<span style="font-weight:400;margin-left:8px">${p.顧客.フラグメモ}</span>` : '');
+    } else {
+      flagBanner.style.display = 'none';
+    }
+  }
 
   // ヘッダー
   document.getElementById('od-title').textContent = p.顧客?.施主名 || '—';
@@ -6855,7 +7013,7 @@ async function openInvoiceModal() {
   if (!currentOrderId) { showToast('案件を開いてから操作してください', true); return; }
   try {
     const { data: p, error: pErr } = await db.from('工事案件')
-      .select('*, 顧客(施主名,郵便番号,現場住所,自宅電話,携帯電話)')
+      .select('*, 顧客(施主名,郵便番号,現場住所,自宅電話,携帯電話,顧客フラグ)')
       .eq('id', currentOrderId).single();
     if (pErr) throw new Error('案件取得エラー: ' + pErr.message);
     if (!p) throw new Error('案件データが見つかりません');
@@ -7327,6 +7485,12 @@ ${_printCSS(`
 function printEnvelope() {
   const p        = _invOrderData;
   const custName = p.顧客?.施主名 || '';
+  // 郵便不達・転居・逝去フラグがある場合は印刷しない
+  const flag = p.顧客?.顧客フラグ || '';
+  if (isMailExcluded(flag) || detectHPrefix(custName)) {
+    showToast('⚠️ この顧客は郵便除外フラグがあるため封筒印刷できません', true);
+    return;
+  }
   const zipRaw   = (p.顧客?.郵便番号||'').replace(/[^0-9]/g,'').padEnd(7,' ');
   const addr     = p.顧客?.現場住所 || '';
 
