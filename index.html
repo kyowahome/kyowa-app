@@ -3864,13 +3864,14 @@ async function loadOrderList(reset = true) {
       <td style="font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
         <span style="display:inline-flex;align-items:center;gap:2px;max-width:100%">
           ${flagIcons(p.顧客?.顧客フラグ || (detectHPrefix((p.顧客?.施主名||'').trim()||cust.施主名||'') ? '郵便不達' : ''))}
-          <span style="overflow:hidden;text-overflow:ellipsis">${(p.顧客?.施主名||'').trim() || cust.施主名 || '—'}</span>
           ${p.フォルダURL
-            ? `<button onclick="event.stopPropagation();openFolderWeb(this.dataset.url)"
+            ? `<a onclick="event.stopPropagation();openFolderWeb(this.dataset.url)"
                 data-url="${p.フォルダURL.replace(/"/g,'&quot;')}"
-                title="フォルダを開く"
-                style="padding:1px 4px;font-size:10px;background:var(--blue);color:#fff;border:none;border-radius:3px;cursor:pointer;flex-shrink:0">📁</button>`
-            : ''}
+                href="javascript:void(0)"
+                title="クリックでフォルダを開く"
+                style="color:var(--blue);overflow:hidden;text-overflow:ellipsis">${(p.顧客?.施主名||'').trim() || cust.施主名 || '—'}</a>`
+            : `<span style="overflow:hidden;text-overflow:ellipsis">${(p.顧客?.施主名||'').trim() || cust.施主名 || '—'}</span>`
+          }
         </span>
       </td>
       <td style="font-size:11px;color:var(--text-sub)">${cust.エリア||'—'}</td>
