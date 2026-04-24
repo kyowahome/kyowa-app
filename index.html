@@ -870,7 +870,7 @@
               <label>フォルダURL（NAS/クラウド）</label>
               <div style="display:flex;gap:6px">
                 <input type="text" id="od-folder-url" placeholder="https://... または \\NAS\..." style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:12px">
-                <button class="btn sm" id="od-folder-btn" onclick="openFolderUrl()" style="white-space:nowrap">📂 開く</button>
+                <button class="btn sm" id="od-folder-btn" onclick="openFolderUrl()" style="white-space:nowrap">📂 フォルダを開く</button>
               </div>
             </div>
             <div class="field" style="grid-column:1/-1;background:var(--surface2);border-radius:6px;padding:8px 12px;font-size:12px">
@@ -3866,9 +3866,9 @@ async function loadOrderList(reset = true) {
           ${flagIcons(p.顧客?.顧客フラグ || (detectHPrefix((p.顧客?.施主名||'').trim()||cust.施主名||'') ? '郵便不達' : ''))}
           <span style="overflow:hidden;text-overflow:ellipsis">${(p.顧客?.施主名||'').trim() || cust.施主名 || '—'}</span>
           ${p.フォルダURL
-            ? `<button onclick="event.stopPropagation();copyFolderPath(this.dataset.url)"
+            ? `<button onclick="event.stopPropagation();openFolderWeb(this.dataset.url)"
                 data-url="${p.フォルダURL.replace(/"/g,'&quot;')}"
-                title="フォルダパスをコピー"
+                title="フォルダを開く"
                 style="padding:1px 4px;font-size:10px;background:var(--blue);color:#fff;border:none;border-radius:3px;cursor:pointer;flex-shrink:0">📁</button>`
             : ''}
         </span>
@@ -4200,27 +4200,46 @@ async function saveOrderDetail() {
 function openFolderUrl() {
   const url = document.getElementById('od-folder-url').value.trim();
   if (!url) { showToast('URLが入力されていません', true); return; }
-  copyFolderPath(url);
+  openFolderWeb(url);
 }
 
-// フォルダパスをクリップボードにコピー
-function copyFolderPath(url) {
-  if (!url) { showToast('フォルダURLが登録されていません', true); return; }
-  // Supabaseに保存されているURLをそのままUNCパスに変換
-  // 例: file:///\\192.168.3.10\kyoway_data\... → \\192.168.3.10\kyoway_data\...
-  let path = url;
-  // file:/// を除去
-  path = path.replace(/^file:\/\/\//, '');
-  // 先頭が \\ でなければ \\ を付ける
-  if (!path.startsWith('\\\\')) {
-    path = '\\\\' + path.replace(/^\\*/, '');
+// file:///\\192.168.3.10\kyoway_data\kyoway_data\... → http://192.168.3.10:8080/?path=...
+function folderUrlToWeb(url) {
+  if (!url) return null;
+  // HS: \\192.168.3.10\kyoway_data\kyoway_data\ を除去
+  // EST: \\192.168.1.10\estate\estate-data\ を除去
+  let path = url
+    .replace(/^file:\/\/\//i, '')          // file:/// 除去
+    .replace(/^[\\\/]+/g, '')              // 先頭の \ 除去
+    .replace(/\\/g, '/');                  // \ → /
+
+  // HSパス変換: 192.168.3.10/kyoway_data/kyoway_data/... → path=...
+  if (path.startsWith('192.168.3.10/kyoway_data/kyoway_data/')) {
+    const rel = path.replace('192.168.3.10/kyoway_data/kyoway_data/', '');
+    return 'http://192.168.3.10:8080/?path=' + rel;
   }
-  console.log('コピーするパス:', path); // デバッグ用
-  navigator.clipboard.writeText(path).then(() => {
-    showToast('📋 パスをコピーしました → エクスプローラーのアドレスバーに貼り付けてEnter');
-  }).catch(() => {
-    prompt('以下のパスをコピー → エクスプローラーに貼り付けてください:', path);
-  });
+  // ESTパス変換: 192.168.1.10/estate/estate-data/... → path=...
+  if (path.startsWith('192.168.1.10/estate/estate-data/')) {
+    const rel = path.replace('192.168.1.10/estate/estate-data/', '');
+    return 'http://192.168.1.10:8080/?path=' + rel;
+  }
+  return null;
+}
+
+function openFolderWeb(url) {
+  const webUrl = folderUrlToWeb(url);
+  if (webUrl) {
+    window.open(webUrl, '_blank');
+  } else {
+    // 変換できない場合はパスをコピー
+    let path = url.replace(/^file:\/\/\//,'');
+    path = '\\\\' + path.replace(/^\\+/, '');
+    navigator.clipboard.writeText(path).then(() => {
+      showToast('📋 パスをコピーしました（エクスプローラーに貼り付けてください）');
+    }).catch(() => {
+      prompt('パスをコピーしてエクスプローラーに貼り付けてください:', path);
+    });
+  }
 }
 
 // 入金状況タブ
